@@ -1,0 +1,29 @@
+name: datamaker
+channels:
+  - pytorch
+  - anaconda
+  - conda-forge
+  - defaults
+dependencies:
+  - pandas
+  - tgt
+  - torch-audiomentations
+  - tqdm
+  - Unidecode
+
+  - pytorch
+  - torchvision
+  - pandas
+  - cudatoolkit=9.2
+  - psutil
+  - pip
+  - openblas-devel
+  - tqdm
+  - nose
+  - cython
+  - sox
+  - pip:
+    - progressbar2
+    - matplotlib
+    - torchaudio==0.3.1  
+    - --editable=git+ssh://git@github.com/fairinternal/speech_augment.git@9f0564344740120f5b3687c24d5e009674d51aac#egg=augment
