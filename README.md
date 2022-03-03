@@ -4,9 +4,11 @@ Here are the instruction to build the extended datasets for both training and te
 
 ## Downloading the datasets
 
-### LibriSpeech 100
+### LibriSpeech 1000
 
-Start by downloading train-clean-100 on [this page](https://www.openslr.org/12/).
+LibriSpeech 1000, composed of multiple dataset of librispeech, is used.
+
+Start by downloading train-clean-100, train-clean-360 and train-other-500 on [this page](https://www.openslr.org/12/).
 Then, you will need to download [Van Den Oord](https://arxiv.org/abs/1807.03748) labels [here]((https://drive.google.com/drive/folders/1BhJ2umKH3whguxMwifaKtSra0TgAbtfb).
 
 Your Librispeech directory should have the following structure:
@@ -32,56 +34,6 @@ Librispeech
         train_split.txt
 ```
 
-### ALLSSTAR
-Go here to download the dataset: https://speechbox.linguistics.northwestern.edu/ALLSSTARcentral/#!/recordings and select all L2-ENG audio data.
-
-### NISP
-Clone the following repository: https://github.com/iiscleap/NISP-Dataset.
-
-Then run the following command:
-```
-cd ${NISP_DIR}/NISP-Dataset
-NISP_L1=(Hindi Kannada Malayalam Tamil Telugu)
-for i in "${NISP_L1[@]}"
-do
-echo "Building the dataset ${i}"
-cd ${i}_master/English_${i}
-cat *.tar.gz.* >> tmp.tar.gz
-gzip -d tmp.tar.gz
-tar -xf tmp.tar
-rm tmp.tar
-cd ../..
-done
-```
-
-### CORAAL
-
-The CORAAL dataset can be found here: http://lingtools.uoregon.edu/coraal/.
-In the AS4REAL paper, we worked with the DCA subset. You can download using the following command:
-```
-cd $CORAAL_DIR
-parts=(01 02 03 04 05 06 07 08 09 10)
-for part in "${parts[@]}"
-do
-wget http://lingtools.uoregon.edu/coraal/dca/2018.10.06/DCA_audio_part${part}_2018.10.06.tar.gz
-tar -xvzf DCA_audio_part${part}_2018.10.06.tar.gz
-rm DCA_audio_part${part}_2018.10.06.tar.gz
-done
-wget http://lingtools.uoregon.edu/coraal/dca/2018.10.06/DCA_elanfiles_2018.10.06.tar.gz
-wget http://lingtools.uoregon.edu/coraal/dca/2018.10.06/DCA_metadata_2018.10.06.txt
-wget http://lingtools.uoregon.edu/coraal/dca/2018.10.06/DCA_textfiles_2018.10.06.tar.gz
-wget http://lingtools.uoregon.edu/coraal/dca/2018.10.06/DCA_textgrids_2018.10.06.tar.gz
-tar -xvzf DCA_elanfiles_2018.10.06.tar.gz
-tar -xvzf DCA_textfiles_2018.10.06.tar.gz
-tar -xvzf DCA_textgrids_2018.10.06.tar.gz
-rm DCA_elanfiles_2018.10.06.tar.gz
-rm DCA_textfiles_2018.10.06.tar.gz 
-rm DCA_textgrids_2018.10.06.tar.gz
-```
-
-### Buckeye
-
-The Buckeye dataset can be downloaded here: https://buckeyecorpus.osu.edu/
 
 ## Building the data
 
@@ -124,7 +76,7 @@ python build_vad_datasets.py transform $DATASET_NAME \
 
 ## Noise Augmentation
 
-You will need to download [MUSAN](https://www.openslr.org/17/). To launch the noise augmentation use `build_vad_datasets.py` as follow:
+You will need to audioset [AUDIOSET](https://research.google.com/audioset/dataset/index.html). To launch the noise augmentation use `build_vad_datasets.py` as follow:
 
 ```
 python build_vad_datasets.py transform $DATASET_NAME \
@@ -188,4 +140,15 @@ python build_vad_datasets.py segment $DATASET_NAME \
 
 Google drive: https://drive.google.com/drive/folders/1XXc8526sIsfg6w8h7oOUF9fWC-9ap2Uu?usp=sharing
 
+# What's next ?
 
+- [ ] Fix noise augmentation :
+    - either AddNoise:
+        - Add self.max_size_loaded (which remains constant and indicates the amount of noise data that is being loaded at once)
+        - Add self.cumulated_duration (which is updated after each run of the __call__ function and describes the cumulated duration of segments that have been corrupted with additive noise)
+        - Once self.cumulated_duration reaches self.max_size_loaded, call to self.load_noise_db() that must load M segments of noise until self.max_sized_loaded is reached
+    - Or use Marvin's technics and pre-process noise, concatenate in four big files with cross fading, and use these.
+
+
+- [ ] AddNoise should call AddReverb to corrupt noise segments with reverberation
+- [ ] No need to apply VAD : Audioset already has the labels
