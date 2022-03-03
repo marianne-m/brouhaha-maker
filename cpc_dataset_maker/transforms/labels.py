@@ -1,0 +1,10 @@
+INPUT_PATH_KEY = "input_path"
+OUTPUT_PATH_KEY = "output_path"
+LABELS_KEY = "labels"
+
+SPEECH_ACTIVITY_LABEL = "speech_activity"
+SNR_LABEL = "snr"
+RMS_LABEL = "rms"
+REVERB_LABEL = "c50"
+IMPULSE_RESPONSE_LABEL = "impulse_response_reverb"
+FILE_ORDER_LABEL = "file_order"
