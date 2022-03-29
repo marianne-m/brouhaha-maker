@@ -69,6 +69,11 @@ python build_vad_datasets.py init standard \
 
 We use [Audioset](https://research.google.com/audioset/dataset/index.html) to contaminate Librispeech with noise.
 
+To download Audioset :
+```
+./audioset_download metadata.csv
+```
+
 # Launching pyannote on a dataset
 
 ## Inference
