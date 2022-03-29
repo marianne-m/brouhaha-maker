@@ -45,6 +45,30 @@ python build_vad_datasets.py init $DATASET_NAME \
                              --root-in $DIR_DOWNLOADED_DATA
 ```
 
+## Downloading the reverb dataset
+
+We use impulse datasets to perform a convincing reverberation. We used the [MIT Acoustical Reverberation Scene Statistics Survey](http://mcdermottlab.mit.edu/Reverb/IR_Survey.html) and [EchoThief](http://www.echothief.com/downloads/).
+
+Then we split all the impulse responses into a train set and a dev set with a 80/20 ratio.
+
+You can use the following script to do so :
+
+```
+python reverb_data_prep.py
+```
+
+CPC works with 16kHz audio files, but these reverb datasets have an higher sample rate. To convert them to 16kHz run `build_vad_datasets` again :
+
+```
+python build_vad_datasets.py init standard \
+                             $OUTPUT_DIR_IR_DATASET \
+                             --root-in $DIR_DOWNLOADED_DATA
+```
+
+## Downloading the noise dataset
+
+We use [Audioset](https://research.google.com/audioset/dataset/index.html) to contaminate Librispeech with noise.
+
 # Launching pyannote on a dataset
 
 ## Inference
