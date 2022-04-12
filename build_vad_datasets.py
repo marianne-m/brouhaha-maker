@@ -22,7 +22,7 @@ def init(args):
 
     if args.root_in is not None:
         print("Building the dataset")
-        base_db.build_from_root_dir(args.root_in)
+        base_db.build_from_root_dir(args.root_in, args.file_extension)
 
 
 def transform(args):
@@ -34,7 +34,6 @@ def transform(args):
 
     # For now, load all labels
     labels = out_db.init_audio_labels(base_db.get_all_files())
-    print(labels)
     update_audio_labels(labels, base_db.load_voice_activity(), SPEECH_ACTIVITY_LABEL)
 
     transform_list = [
@@ -90,6 +89,7 @@ def parse_args():
         "Give this argument to build the SNR / VAD modified dataset",
         default=None,
     )
+    parser_init.add_argument("--file_extension", type=str, default=".flac")
 
     parser_transform = subparsers.add_parser("transform")
     update_base_parser(parser_transform)
