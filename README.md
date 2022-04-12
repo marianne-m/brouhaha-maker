@@ -1,41 +1,38 @@
+# Installation
+
+## Environment for SNR - C50 prediction
+
+```
+conda env create -f env_datamaker.yml
+conda activate datamaker
+```
+
+## Environment for VAD
+
+```
+conda env create -f env_pyannote.yml
+conda activate pyannote_datamaker
+```
+
 # Building the datasets for the VAD / SNR predictors
 
 Here are the instruction to build the extended datasets for both training and testing the VAD / SNR prediction model.
 
-## Downloading the datasets
+## Downloading the datasets - Librispeech
 
-### LibriSpeech 1000
+### Librispeech 1000 - train set
 
-LibriSpeech 1000, composed of multiple dataset of librispeech, is used.
+LibriSpeech 1000, composed of multiple datasets of librispeech, is used as a train dataset.
 
-Start by downloading train-clean-100, train-clean-360 and train-other-500 on [this page](https://www.openslr.org/12/).
-Then, you will need to download [Van Den Oord](https://arxiv.org/abs/1807.03748) labels [here]((https://drive.google.com/drive/folders/1BhJ2umKH3whguxMwifaKtSra0TgAbtfb).
+Download train-clean-100, train-clean-360 and train-other-500 on [this page](https://www.openslr.org/12/).
 
-Your Librispeech directory should have the following structure:
+### Librispeech dev
 
-```
-Librispeech
-    |
-    train-clean-100
-        |
-        speaker_1
-            |
-            chapter_1
-                |
-                audio_speaker1_chapter1.wav
-                |...
-            ...
-        ...
-    |
-    LibriSpeech100_labels_split
-        |
-        converted_aligned_phones.txt
-        test_split.txt
-        train_split.txt
-```
+The dev dataset is composed of other librispeech datasets.
 
+Download dev-clean, dev-other, test-clean, test-other on [this page](https://www.openslr.org/12/).
 
-## Building the data
+### Building the data
 
 To build the data, you need to run the script: `build_vad_datasets.py`
 
@@ -54,7 +51,7 @@ Then we split all the impulse responses into a train set and a dev set with a 80
 You can use the following script to do so :
 
 ```
-python reverb_data_prep.py
+python data_preparation/reverb_data_prep.py --dataset-path desired/path/to/reverb/dataset
 ```
 
 CPC works with 16kHz audio files, but these reverb datasets have an higher sample rate. To convert them to 16kHz run `build_vad_datasets` again :
@@ -69,9 +66,11 @@ python build_vad_datasets.py init standard \
 
 We use [Audioset](https://research.google.com/audioset/dataset/index.html) to contaminate Librispeech with noise.
 
-To download Audioset :
+First download the metadata `eval_segments.csv`, `balanced_train_segments.csv` and `unbalanced_train_segments.csv` [here](https://research.google.com/audioset/download.html)
+
+Then, to download Audioset :
 ```
-./audioset_download metadata.csv
+.data_preparation/audioset_download.sh metadata.csv
 ```
 
 # Launching pyannote on a dataset
