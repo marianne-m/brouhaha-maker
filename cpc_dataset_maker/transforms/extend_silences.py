@@ -271,6 +271,9 @@ def expand_audio_and_timeline(
             (x / sample_rate, dur / sample_rate) for x, dur in sil_tuples_frames
         ]
 
+    if len(sil_tuples_frames) == 0:
+        return audio_data, old_speech_activity
+
     new_audio = add_silences_to_speech_mono(
         audio_data, sil_tuples_frames, n_frames_crossfade
     )
