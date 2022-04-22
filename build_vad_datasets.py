@@ -116,7 +116,7 @@ def parse_args():
     group_extend_sil.add_argument(
         "--target-share-sil",
         type=float,
-        default=0.2,
+        default=0.4,
         help="Target silence / voice ratio in the silence extension",
     )
     group_extend_sil.add_argument(
