@@ -195,13 +195,14 @@ def draw_sil_from_non_speech_regions(
     sil_mean_sec: float,
     std_sil_sec: float,
     target_share_sil: float,
+    silence_min_sec: float
 ) -> List[Tuple[float, float]]:
 
     possible_insertions = [-1]
     size_audio = sum(end - start for start, end in old_speech_activity)
     last_end = 0
     for start, end in old_speech_activity:
-        if start - last_end > 2 * cossfade_sec:
+        if start - last_end > silence_min_sec:
             possible_insertions.append(start)
         last_end = end
 
@@ -232,6 +233,7 @@ def expand_audio_and_timeline(
     target_share_sil: float,
     sil_std_sec: float,
     expand_silence_only: bool = True,
+    sil_min_sec: float = 0.5
 ) -> Tuple[torch.tensor, List[Tuple[float, float]]]:
 
     sil_mean_frame = int(sample_rate * sil_mean_sec)
@@ -248,6 +250,7 @@ def expand_audio_and_timeline(
                 sil_mean_sec=sil_mean_sec,
                 std_sil_sec=sil_std_sec,
                 target_share_sil=target_share_sil,
+                silence_min_sec=sil_min_sec
             ),
             cossfade_sec,
         )
@@ -290,6 +293,7 @@ class ExtendSilenceTransform(Transform):
         target_share_sil: float,
         sil_std_sec: Optional[float] = None,
         expand_silence_only: bool = True,
+        sil_min_sec: float = 0.5
     ) -> None:
         super().__init__()
 
@@ -300,6 +304,7 @@ class ExtendSilenceTransform(Transform):
         self.target_share_sil = target_share_sil
         self.sil_std_sec = sil_std_sec
         self.expand_silence_only = expand_silence_only
+        self.sil_min_sec = sil_min_sec
 
     @property
     def input_labels(self) -> Set[str]:
@@ -332,6 +337,7 @@ class ExtendSilenceTransform(Transform):
             target_share_sil=self.target_share_sil,
             sil_std_sec=self.sil_std_sec,
             expand_silence_only=self.expand_silence_only,
+            sil_min_sec=self.sil_min_sec
         )
 
         new_labels = deepcopy(label_dict)
