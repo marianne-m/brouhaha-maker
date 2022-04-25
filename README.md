@@ -82,14 +82,11 @@ To run a pyannote inference on a dataset, you can use the script `vad_pyannote/l
 ```
 python vad_pyannote/launch_vad_pyannote.py ${DATASET_DIR}/audio_16k \
                                             --file_extension .flac
-                                            -o ${DATASET_DIR}/vad_pyannote
+                                            -o ${DATASET_DIR}/rttm_files
 ```
 
 This script takes advantage of all available GPUs. You can launch it on scrum to deal efficiently with large dataset.
 
-## Training
-
-TODO
 
 # Apply diverse transformations the dataset
 
@@ -100,6 +97,20 @@ python build_vad_datasets.py transform $DATASET_NAME \
                              $OUTPUT_DIR_VAD_DATASET \
                              -o $OUTPUT_DIR_TRANSFORM \
                             --transforms [ TRANSFORM_COMBINATON ]
+```
+
+## Silence extension
+
+You can extend the silences of your dataset by using the following command : 
+
+```
+python build_vad_datasets.py transform $DATASET_NAME \
+                             $OUTPUT_DIR_VAD_DATASET \
+                             --name sil \
+                             -o $OUTPUT_DIR_TRANSFORM \
+                             --transforms extend_sil \
+                             --expand-silence-only \  # use this option if you want to expand only the existing silences
+                             --target-share-sil 0.5 \
 ```
 
 ## Noise Augmentation
