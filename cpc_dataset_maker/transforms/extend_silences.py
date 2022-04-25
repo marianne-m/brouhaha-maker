@@ -19,16 +19,14 @@ def make_ramp(
         return audio_data
 
     step_size = (multiplier_end - multiplier_start) / n_steps
-    ramp = multiplier_end * torch.ones(
-        audio_data.size(), device=audio_data.device, dtype=audio_data.dtype
-    )
-    ramp[:n_steps] = torch.arange(
+
+    ramp = torch.arange(
         multiplier_start,
         multiplier_end,
         step_size,
         device=audio_data.device,
         dtype=audio_data.dtype,
-    )[:n_steps]
+    )
 
     return audio_data * ramp
 
@@ -55,25 +53,25 @@ def add_silences_to_speech_mono(
 
     if silences[0][0] < 0:
         duration = silences[0][1]
-        out += [torch.zeros(duration - crossfade_frame, dtype=torch.float)]
+        out.append(torch.zeros(duration - crossfade_frame, dtype=torch.float))
         silences = silences[1:]
         ramp_last = True
 
     for frame_start, duration in silences:
         shift = 0
         if ramp_last:
-            out += [
+            out.append(
                 make_ramp(
                     audio_data[last_frame_end : last_frame_end + crossfade_frame], 0, 1
                 )
-            ]
+            )
             shift = last_frame_end + crossfade_frame
         if shift > frame_start:
             raise RuntimeError("Speech activity smaller than crossfade")
-        out += [audio_data[shift:frame_start]]
-        out += [
+        out.append(audio_data[shift:frame_start])
+        out.append(
             make_ramp(audio_data[frame_start : frame_start + crossfade_frame], 1, 0)
-        ]
+        )
         n_zeros = duration - out[-1].size(0)
         if frame_start + duration < audio_data.size(0):
             n_zeros -= crossfade_frame
@@ -82,22 +80,22 @@ def add_silences_to_speech_mono(
             last_frame_end = audio_data.size(0)
         if n_zeros < 0:
             raise RuntimeError("Crossfade larger than silence")
-        out += [
+        out.append(
             torch.zeros(
                 n_zeros,
                 device=audio_data.device,
                 dtype=audio_data.dtype,
             )
-        ]
+        )
         ramp_last = True
 
     if last_frame_end < audio_data.size(0):
-        out += [
+        out.append(
             make_ramp(
                 audio_data[last_frame_end : last_frame_end + crossfade_frame], 0, 1
             )
-        ]
-        out += [audio_data[last_frame_end + crossfade_frame :]]
+        )
+        out.append(audio_data[last_frame_end + crossfade_frame :])
 
     return torch.cat(out, dim=0)
 
@@ -112,7 +110,7 @@ def update_speech_activity_from_new_silence(
     o_speech_start, o_speech_end = old_speech_activity[0]
     for sil_start, sil_duration in silences:
         while o_speech_end < sil_start:
-            new_timeline += [(o_speech_start + offset_start, o_speech_end + offset_end)]
+            new_timeline.append((o_speech_start + offset_start, o_speech_end + offset_end))
             offset_start = offset_end
             i_old_timeline += 1
 
@@ -126,19 +124,19 @@ def update_speech_activity_from_new_silence(
         elif sil_start < o_speech_end:
             offset_end += sil_duration
             if o_speech_start < sil_start:
-                new_timeline += [
+                new_timeline.append(
                     (o_speech_start + offset_start, sil_start + offset_start)
-                ]
+                )
             o_speech_start = sil_start
             offset_start += sil_duration
         else:
             offset_end += sil_duration
             offset_start = offset_end
 
-    new_timeline += [(o_speech_start + offset_start, o_speech_end + offset_end)]
+    new_timeline.append((o_speech_start + offset_start, o_speech_end + offset_end))
     offset_end = offset_start
     for start, end in old_speech_activity[i_old_timeline + 1 :]:
-        new_timeline += [(start + offset_start, end + offset_end)]
+        new_timeline.append((start + offset_start, end + offset_end))
 
     return new_timeline
 
@@ -168,24 +166,24 @@ def draw_sil(
 
 
 def merge_sils(
-    sils: List[Tuple[Union[int, float], Union[int, float]]], crossfade: float
+    silences_duration: List[Tuple[Union[int, float], Union[int, float]]], crossfade: float
 ) -> List[Tuple[Union[int, float], Union[int, float]]]:
 
-    if len(sils) == 0:
+    if len(silences_duration) == 0:
         return []
 
-    sils.sort()
+    silences_duration.sort()
 
-    out = [sils[0]]
+    out = [silences_duration[0]]
     last_start = out[0][0]
     last_end = last_start + out[0][1]
-    for start, duration in sils[1:]:
+    for start, duration in silences_duration[1:]:
 
         if start <= last_end + 2 * crossfade:
             last_end = start + duration
             out[-1] = (last_start, last_end - last_start)
         else:
-            out += [(start, duration)]
+            out.append((start, duration))
             last_start, last_end = start, start + duration
 
     return out
@@ -197,17 +195,18 @@ def draw_sil_from_non_speech_regions(
     sil_mean_sec: float,
     std_sil_sec: float,
     target_share_sil: float,
+    silence_min_sec: float
 ) -> List[Tuple[float, float]]:
 
     possible_insertions = [-1]
     size_audio = sum(end - start for start, end in old_speech_activity)
     last_end = 0
     for start, end in old_speech_activity:
-        if start - last_end > 2 * cossfade_sec:
-            possible_insertions += [start]
+        if start - last_end > silence_min_sec:
+            possible_insertions.append(start)
         last_end = end
 
-    possible_insertions += [old_speech_activity[-1][-1]]
+    possible_insertions.append(old_speech_activity[-1][-1])
 
     n_samples = int(size_audio * target_share_sil / sil_mean_sec)
     if n_samples >= len(possible_insertions):
@@ -216,13 +215,13 @@ def draw_sil_from_non_speech_regions(
     else:
         sampled_items = random.sample(possible_insertions, n_samples)
 
-    sils = (
+    silences_duration = (
         torch.nn.functional.relu(
             torch.randn(n_samples, dtype=float) * std_sil_sec + sil_mean_sec
         )
         + 2 * cossfade_sec
     )
-    return [(x, dur.item()) for x, dur in zip(sampled_items, sils)]
+    return [(start, duration.item()) for start, duration in zip(sampled_items, silences_duration)]
 
 
 def expand_audio_and_timeline(
@@ -234,6 +233,7 @@ def expand_audio_and_timeline(
     target_share_sil: float,
     sil_std_sec: float,
     expand_silence_only: bool = True,
+    sil_min_sec: float = 0.5
 ) -> Tuple[torch.tensor, List[Tuple[float, float]]]:
 
     sil_mean_frame = int(sample_rate * sil_mean_sec)
@@ -250,6 +250,7 @@ def expand_audio_and_timeline(
                 sil_mean_sec=sil_mean_sec,
                 std_sil_sec=sil_std_sec,
                 target_share_sil=target_share_sil,
+                silence_min_sec=sil_min_sec
             ),
             cossfade_sec,
         )
@@ -292,6 +293,7 @@ class ExtendSilenceTransform(Transform):
         target_share_sil: float,
         sil_std_sec: Optional[float] = None,
         expand_silence_only: bool = True,
+        sil_min_sec: float = 0.5
     ) -> None:
         super().__init__()
 
@@ -302,6 +304,7 @@ class ExtendSilenceTransform(Transform):
         self.target_share_sil = target_share_sil
         self.sil_std_sec = sil_std_sec
         self.expand_silence_only = expand_silence_only
+        self.sil_min_sec = sil_min_sec
 
     @property
     def input_labels(self) -> Set[str]:
@@ -334,6 +337,7 @@ class ExtendSilenceTransform(Transform):
             target_share_sil=self.target_share_sil,
             sil_std_sec=self.sil_std_sec,
             expand_silence_only=self.expand_silence_only,
+            sil_min_sec=self.sil_min_sec
         )
 
         new_labels = deepcopy(label_dict)

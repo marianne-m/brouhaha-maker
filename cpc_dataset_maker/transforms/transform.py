@@ -50,10 +50,6 @@ class Transform:
     def _run_on_file(self, data: Dict[str, Any]) -> Dict[str, Any]:
 
         path_in = data[INPUT_PATH_KEY]
-        print("path_in")
-        print(path_in)
-        print("data")
-        print(data)
         path_out = data[OUTPUT_PATH_KEY]
         labels = data[LABELS_KEY]
 

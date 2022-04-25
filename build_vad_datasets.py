@@ -116,7 +116,7 @@ def parse_args():
     group_extend_sil.add_argument(
         "--target-share-sil",
         type=float,
-        default=0.2,
+        default=0.4,
         help="Target silence / voice ratio in the silence extension",
     )
     group_extend_sil.add_argument(
@@ -129,6 +129,14 @@ def parse_args():
         "--expand-silence-only",
         action="store_true",
         help="If set to true, add silence only to non spech regions",
+    )
+
+    group_extend_sil.add_argument(
+        "--silence-min-duration",
+        type=float,
+        default=0.5,
+        help="If --expand-silence-only is on, silences longer than silence-min-duration"
+             "will be expanded" 
     )
 
     group_extend_reverb = parser_transform.add_argument_group(

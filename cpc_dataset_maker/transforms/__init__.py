@@ -15,6 +15,7 @@ def get_transform(transform_type: str, **kwargs):
             sil_mean_sec=kwargs["sil_mean_sec"],
             target_share_sil=kwargs["target_share_sil"],
             expand_silence_only=kwargs["expand_silence_only"],
+            sil_min_sec=kwargs["silence_min_duration"]
         )
     if transform_type == "reverb":
         return Reverb(
