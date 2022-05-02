@@ -6,9 +6,10 @@ import torch
 import torchaudio
 import tqdm
 from cpc_dataset_maker.transforms.transform import Transform
-from cpc_dataset_maker.transforms.labels import SNR_LABEL, RMS_LABEL
+from cpc_dataset_maker.transforms.labels import SNR_LABEL, RMS_LABEL, SPEECH_ACTIVITY_LABEL
 from cpc_dataset_maker.transforms.normalization import (
     energy_normalization,
+    energy_normalization_on_vad,
     peak_normalization,
 )
 from typing import Any, Dict, Set, Tuple, Union
@@ -94,7 +95,7 @@ class AddNoise(Transform):
         noise_seq_torch = self.noise_data[frame_start : frame_start + audio_nb_frames]
 
         y = peak_normalization(
-            energy_normalization(audio_data)
+            energy_normalization_on_vad(audio_data, label_dict[SPEECH_ACTIVITY_LABEL], sr)
             + energy_normalization(noise_seq_torch) * noise_rms
         )
         new_labels = deepcopy(label_dict)
