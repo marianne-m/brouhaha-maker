@@ -6,16 +6,33 @@ import torch
 import torchaudio
 import tqdm
 from cpc_dataset_maker.transforms.transform import Transform
-from cpc_dataset_maker.transforms.labels import SNR_LABEL, RMS_LABEL, SPEECH_ACTIVITY_LABEL
+from cpc_dataset_maker.transforms.labels import SNR_LABEL, DETAILED_SNR, RMS_LABEL, SPEECH_ACTIVITY_LABEL
 from cpc_dataset_maker.transforms.normalization import (
     energy_normalization,
     energy_normalization_on_vad,
     peak_normalization,
 )
-from typing import Any, Dict, Set, Tuple, Union
+from typing import Any, Dict, Set, List, Tuple, Union
 
 SNR_NO_NOISE = 30
 CROSSFADE_MAX = 50
+
+
+def compute_detailed_snr(audio_data: torch.Tensor, noise: torch.Tensor, rms_total:float, sample_rate, step: float = 0.01, window_size: int = 2) -> List[List[float]]:
+    """
+    Compute the mean snr every step on a sliding window of size window_size.
+    step and window_size are in seconds
+    """
+    pass
+
+
+def save_detailed_snr_labels(values: List[float], file_path: Union[Path, str]) -> None:
+    seq_name = Path(file_path).stem
+    with open(file_path, "w") as rttm_file:
+        for start, end, snr in values:
+            rttm_file.write(
+                f"{seq_name} {start} {end} {snr}\n"
+            )
 
 
 # add noise to audio files
@@ -59,7 +76,7 @@ class AddNoise(Transform):
 
     @property
     def output_labels(self) -> Set[str]:
-        return {RMS_LABEL, SNR_LABEL}
+        return {RMS_LABEL, SNR_LABEL, DETAILED_SNR}
 
     @property
     def size_noise(self) -> int:
@@ -101,5 +118,6 @@ class AddNoise(Transform):
         new_labels = deepcopy(label_dict)
         new_labels[RMS_LABEL] = noise_rms
         new_labels[SNR_LABEL] = snr
+        new_labels[DETAILED_SNR] = compute_detailed_snr(audio_data, noise_seq_torch, noise_rms, sr)
 
         return y, new_labels

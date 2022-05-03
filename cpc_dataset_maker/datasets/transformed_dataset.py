@@ -11,6 +11,7 @@ from cpc_dataset_maker.transforms.labels import (
     LABELS_KEY,
     OUTPUT_PATH_KEY,
     SNR_LABEL,
+    DETAILED_SNR,
 )
 
 
@@ -87,4 +88,9 @@ class TransformDataset(Dataset):
         if SNR_LABEL in new_labels[0][LABELS_KEY]:
             self.save_snr_labels(
                 {x[OUTPUT_PATH_KEY]: x[LABELS_KEY][SNR_LABEL] for x in new_labels}
+            )
+
+        if DETAILED_SNR in new_labels[0][LABELS_KEY]:
+            self.save_detailed_snr_labels(
+                {x[OUTPUT_PATH_KEY]: x[LABELS_KEY][DETAILED_SNR] for x in new_labels}
             )
