@@ -1,3 +1,4 @@
+from numpy import log10, cumsum
 from copy import deepcopy
 import random
 from copy import deepcopy
@@ -18,12 +19,28 @@ SNR_NO_NOISE = 30
 CROSSFADE_MAX = 50
 
 
-def compute_detailed_snr(audio_data: torch.Tensor, noise: torch.Tensor, rms_total:float, sample_rate, step: float = 0.01, window_size: int = 2) -> List[List[float]]:
+def compute_detailed_snr(audio_data: torch.Tensor, noise: torch.Tensor, sample_rate, step: float = 0.01, window_size: int = 2) -> List[List[float]]:
     """
     Compute the mean snr every step on a sliding window of size window_size.
     step and window_size are in seconds
     """
-    pass
+    window_frames = int(window_size * sample_rate)
+    step_in_frames = int(step * sample_rate)
+
+    detailed_snr = list()
+
+    power_audio = cumsum([x**2 for x in audio_data])
+    power_noise = cumsum([x**2 for x in noise])
+
+    for start_window in range(0, audio_data.size()[0] - window_frames + 1, step_in_frames):
+        end_window = start_window + window_frames - 1
+        signal_to_noise = (power_audio[end_window] - power_audio[start_window]) / \
+                            (power_noise[end_window] - power_noise[start_window])
+        snr = 10 * log10(signal_to_noise)
+        detailed_snr.append([start_window, end_window, snr])
+
+    # [(power_audio[st + w] - power_audio[st]) / (power_noise[st + w] - power_noise[st]) for st in range(0, audio_data.size()[0], step_in_frames)]
+    return detailed_snr
 
 
 def save_detailed_snr_labels(values: List[float], file_path: Union[Path, str]) -> None:
@@ -111,13 +128,16 @@ class AddNoise(Transform):
         frame_start = random.randint(0, self.size_noise - audio_nb_frames)
         noise_seq_torch = self.noise_data[frame_start : frame_start + audio_nb_frames]
 
+        audio_data_normalized = energy_normalization_on_vad(audio_data, label_dict[SPEECH_ACTIVITY_LABEL], sr)
+        noise = energy_normalization(noise_seq_torch) * noise_rms
+
         y = peak_normalization(
-            energy_normalization_on_vad(audio_data, label_dict[SPEECH_ACTIVITY_LABEL], sr)
-            + energy_normalization(noise_seq_torch) * noise_rms
+            audio_data_normalized
+            + noise
         )
         new_labels = deepcopy(label_dict)
         new_labels[RMS_LABEL] = noise_rms
         new_labels[SNR_LABEL] = snr
-        new_labels[DETAILED_SNR] = compute_detailed_snr(audio_data, noise_seq_torch, noise_rms, sr)
+        new_labels[DETAILED_SNR] = compute_detailed_snr(audio_data_normalized, noise, sr)
 
         return y, new_labels
