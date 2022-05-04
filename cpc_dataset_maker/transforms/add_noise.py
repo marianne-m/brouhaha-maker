@@ -1,4 +1,4 @@
-from numpy import log10, cumsum
+from numpy import log10, cumsum, arange
 from copy import deepcopy
 import random
 from copy import deepcopy
@@ -32,14 +32,16 @@ def compute_detailed_snr(audio_data: torch.Tensor, noise: torch.Tensor, sample_r
     power_audio = cumsum([x**2 for x in audio_data])
     power_noise = cumsum([x**2 for x in noise])
 
-    for start_window in range(0, audio_data.size()[0] - window_frames + 1, step_in_frames):
-        end_window = start_window + window_frames - 1
-        signal_to_noise = (power_audio[end_window] - power_audio[start_window]) / \
-                            (power_noise[end_window] - power_noise[start_window])
-        snr = 10 * log10(signal_to_noise)
-        detailed_snr.append([start_window, end_window, snr])
+    start_windows = arange(0, audio_data.size()[0] - window_frames + 1, step_in_frames)
+    end_windows = arange(window_frames - 1, audio_data.size()[0], step_in_frames)
+ 
+    signal_to_noise = [(power_audio[end] - power_audio[start]) / (power_noise[end] - power_noise[start]) \
+                        for start, end in zip(start_windows, end_windows)]
+    # signal_to_noise = (power_audio[end_windows] - power_audio[start_windows]) / (power_noise[end_windows] - power_noise[start_windows])
+ 
+    snr_db = 10 * log10(signal_to_noise)
+    detailed_snr = zip(start_windows, end_windows, snr_db)
 
-    # [(power_audio[st + w] - power_audio[st]) / (power_noise[st + w] - power_noise[st]) for st in range(0, audio_data.size()[0], step_in_frames)]
     return detailed_snr
 
 
