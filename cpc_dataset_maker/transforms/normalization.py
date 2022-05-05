@@ -4,11 +4,7 @@ from cpc_dataset_maker.transforms.transform import Transform
 
 
 def energy_normalization_on_vad(wav, vad_labels, sample_rate, epsilon: float = 1e-8):
-    wav_during_vad = []
-    for start, end in vad_labels:
-        start_frame = int(start * sample_rate)
-        end_frame = int(end * sample_rate) + 1
-        wav_during_vad.append(wav[start_frame:end_frame])
+    wav_during_vad = [wav[int(start * sample_rate): int(end * sample_rate)] for start, end in vad_labels]
     wav_during_vad = torch.cat(wav_during_vad, dim=0)
 
     return wav / (torch.sqrt(torch.mean(wav_during_vad ** 2)) + epsilon)
