@@ -1,4 +1,4 @@
-from numpy import log10, cumsum, arange
+from numpy import log10, cumsum, arange, square
 from copy import deepcopy
 import random
 from copy import deepcopy
@@ -27,18 +27,15 @@ def compute_detailed_snr(audio_data: torch.Tensor, noise: torch.Tensor, sample_r
     window_frames = int(window_size * sample_rate)
     step_in_frames = int(step * sample_rate)
 
-    detailed_snr = list()
-
-    power_audio = cumsum([x**2 for x in audio_data])
-    power_noise = cumsum([x**2 for x in noise])
+    power_audio = cumsum(square(audio_data))
+    power_noise = cumsum(square(noise))
 
     start_windows = arange(0, audio_data.size()[0] - window_frames + 1, step_in_frames)
     end_windows = arange(window_frames - 1, audio_data.size()[0], step_in_frames)
- 
+
     signal_to_noise = [(power_audio[end] - power_audio[start]) / (power_noise[end] - power_noise[start]) \
                         for start, end in zip(start_windows, end_windows)]
-    # signal_to_noise = (power_audio[end_windows] - power_audio[start_windows]) / (power_noise[end_windows] - power_noise[start_windows])
- 
+
     snr_db = 10 * log10(signal_to_noise)
     detailed_snr = zip(start_windows, end_windows, snr_db)
 
