@@ -1,4 +1,4 @@
-from numpy import log10, cumsum, arange, square
+from numpy import log10, cumsum, arange, square, zeros_like
 from copy import deepcopy
 import random
 from copy import deepcopy
@@ -19,7 +19,14 @@ SNR_NO_NOISE = 30
 CROSSFADE_MAX = 50
 
 
-def compute_detailed_snr(audio_data: torch.Tensor, noise: torch.Tensor, sample_rate, step: float = 0.01, window_size: int = 2) -> List[List[float]]:
+def compute_detailed_snr(
+    audio_data: torch.Tensor,
+    noise: torch.Tensor,
+    sample_rate: int,
+    vad: List[Tuple[float, float]],
+    step: float = 0.01,
+    window_size: int = 2
+) -> List[List[float]]:
     """
     Compute the mean snr every step on a sliding window of size window_size.
     step and window_size are in seconds
@@ -27,14 +34,25 @@ def compute_detailed_snr(audio_data: torch.Tensor, noise: torch.Tensor, sample_r
     window_frames = int(window_size * sample_rate)
     step_in_frames = int(step * sample_rate)
 
+    vad_mask = zeros_like(audio_data)
+    vad_frame = [(int(st*sample_rate), int(end*sample_rate)) for st, end in vad]
+    for start_speech_activity, end_speech_activity in vad_frame:
+        vad_mask[start_speech_activity:end_speech_activity] = 1
+    audio_data = audio_data * vad_mask  
+
     power_audio = cumsum(square(audio_data))
     power_noise = cumsum(square(noise))
 
-    start_windows = arange(0, audio_data.size()[0] - window_frames + 1, step_in_frames)
-    end_windows = arange(window_frames - 1, audio_data.size()[0], step_in_frames)
+    start_windows = arange(0, audio_data.size(0) - window_frames + 1, step_in_frames)
+    end_windows = arange(window_frames - 1, audio_data.size(0), step_in_frames)  
 
-    signal_to_noise = [(power_audio[end] - power_audio[start]) / (power_noise[end] - power_noise[start]) \
-                        for start, end in zip(start_windows, end_windows)]
+    # max(signal_to_noise, 10**(-10)) so the snr_db is equal to -100 when the signal is 0
+    signal_to_noise = [
+        max(
+            (power_audio[end] - power_audio[start]) / (power_noise[end] - power_noise[start]),
+            10**(-10)
+        ) for start, end in zip(start_windows, end_windows)
+    ]
 
     snr_db = 10 * log10(signal_to_noise)
     detailed_snr = zip(start_windows, end_windows, snr_db)
@@ -137,6 +155,11 @@ class AddNoise(Transform):
         new_labels = deepcopy(label_dict)
         new_labels[RMS_LABEL] = noise_rms
         new_labels[SNR_LABEL] = snr
-        new_labels[DETAILED_SNR] = compute_detailed_snr(audio_data_normalized, noise, sr)
+        new_labels[DETAILED_SNR] = compute_detailed_snr(
+            audio_data_normalized,
+            noise,
+            sr,
+            label_dict[SPEECH_ACTIVITY_LABEL]
+        )
 
         return y, new_labels
