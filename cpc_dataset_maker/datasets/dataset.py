@@ -21,6 +21,7 @@ from cpc_dataset_maker.vad_pyannote.rttm_data import (
     save_speech_activities_to_rttm,
     speech_activities_to_int_sequence,
 )
+from cpc_dataset_maker.transforms.add_noise import save_detailed_snr_labels
 
 CPC_SPLIT_LENGTH = 0.01
 TIME_STEP_PYANNOTE = 0.0203125
@@ -246,6 +247,7 @@ class Dataset:
         path_pred: Union[str, Path] = None,
         path_phone_labels: Union[str, Path] = None,
         path_snr_labels: Union[str, Path] = None,
+        path_detailed_snr_labels: Union[str, Path] = None,
         path_reverb_labels: Union[str, Path] = None,
         ignore_cache: bool = False,  # ignore existing cache files
     ):
@@ -292,6 +294,10 @@ class Dataset:
     @property
     def path_snr_labels(self) -> Path:
         return self.root / "snr_labels.txt"
+
+    @property
+    def path_detailed_snr_labels(self) -> Path:
+        return self.root / "detailed_snr_labels"
 
     @property
     def path_reverb_labels(self) -> Path:
@@ -381,6 +387,14 @@ class Dataset:
         with open(self.path_snr_labels, "w") as f_:
             for file_path, snr in data.items():
                 f_.write(f"{Path(file_path).stem} {snr}\n")
+
+    def save_detailed_snr_labels(self, data: Dict[str, List[List[float]]]) -> None:
+        print(f"Saving the detailed SNR information to {self.path_detailed_snr_labels}")
+        self.path_detailed_snr_labels.mkdir(exist_ok=True)
+        for file_path, value in data.items():
+            save_detailed_snr_labels(
+                value, self.path_detailed_snr_labels / f"{Path(file_path).stem}_snr.txt"
+            )
 
     def create_phone_labels(self, *args) -> None:
         raise RuntimeError("create_phone_labels is not implemented")
