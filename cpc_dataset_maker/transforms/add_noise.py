@@ -7,26 +7,18 @@ import torch
 import torchaudio
 import tqdm
 from cpc_dataset_maker.transforms.transform import Transform
-<<<<<<< HEAD
 from cpc_dataset_maker.transforms.labels import SNR_LABEL, DETAILED_SNR, RMS_LABEL, SPEECH_ACTIVITY_LABEL
-=======
-from cpc_dataset_maker.transforms.labels import SNR_LABEL, RMS_LABEL
 from cpc_dataset_maker.transforms.extend_silences import make_ramp
->>>>>>> 8a827b1 (add crossfading while loading the noise database)
 from cpc_dataset_maker.transforms.normalization import (
     energy_normalization,
     energy_normalization_on_vad,
     peak_normalization,
 )
-<<<<<<< HEAD
 from typing import Any, Dict, Set, List, Tuple, Union
-=======
-from typing import Any, Dict, Set, Tuple, Union
-from time import time
->>>>>>> 8a827b1 (add crossfading while loading the noise database)
 
 SNR_NO_NOISE = 30
 CROSSFADE_MAX = 50
+SAMPLE_RATE = 16000
 
 
 def compute_detailed_snr(
@@ -88,6 +80,8 @@ class AddNoise(Transform):
         snr_min: float = 0.1,
         snr_max: float = 0.9 * SNR_NO_NOISE,
         snr_no_noise: float = SNR_NO_NOISE,
+        sample_rate: int = SAMPLE_RATE,
+        crossfading_duration: float = 0.5
     ):
         self.dir_noise = Path(dir_noise)
         self.noise_files = [
@@ -101,10 +95,13 @@ class AddNoise(Transform):
         print(
             f"Add noise to audio files with a random SNR between {snr_min} and {snr_max}"
         )
-        self.load_noise_db()
+        self.load_noise_db(crossfading_duration, sample_rate)
 
-    def load_noise_db(self, crossfade_sec = 0.5, sample_rate = 16000) -> None:
-        start = time()
+    def load_noise_db(
+        self,
+        crossfade_sec: float,
+        sample_rate: int
+    ) -> None:
         print("Loading the noise dataset")
         crossfade_frame = int(crossfade_sec * sample_rate)
         noise_data = []
@@ -123,8 +120,7 @@ class AddNoise(Transform):
         noise_data.append(noise_file[-crossfade_frame:])
 
         self.noise_data = torch.cat(noise_data, dim=0)
-        end = time()
-        print(f"Took {end-start} seconds to load the noise dataset.")
+
         print("Dataset loaded")
 
     @property
