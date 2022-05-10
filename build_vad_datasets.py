@@ -183,6 +183,12 @@ def parse_args():
     group_extend_noise.add_argument(
         "--snr-max", type=float, help="Maximal value of the snr", default=30
     )
+    group_extend_reverb.add_argument(
+        "--dir-ir-on-noise",
+        type=str,
+        help="Directory containing a set of impulse responses for the"
+             "reverberation of noise segments",
+    )
 
     parser_segment = subparsers.add_parser("segmentation")
     update_base_parser(parser_segment)

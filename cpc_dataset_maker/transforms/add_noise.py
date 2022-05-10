@@ -7,6 +7,7 @@ import torch
 import torchaudio
 import tqdm
 from cpc_dataset_maker.transforms.transform import Transform
+from cpc_dataset_maker.transforms.add_reverb import Reverb
 from cpc_dataset_maker.transforms.labels import SNR_LABEL, DETAILED_SNR, RMS_LABEL, SPEECH_ACTIVITY_LABEL
 from cpc_dataset_maker.transforms.extend_silences import make_ramp
 from cpc_dataset_maker.transforms.normalization import (
@@ -76,6 +77,7 @@ class AddNoise(Transform):
     def __init__(
         self,
         dir_noise: Union[str, Path],
+        dir_impulse_response,
         ext_noise: str = ".flac",
         snr_min: float = 0.1,
         snr_max: float = 0.9 * SNR_NO_NOISE,
@@ -95,6 +97,8 @@ class AddNoise(Transform):
         print(
             f"Add noise to audio files with a random SNR between {snr_min} and {snr_max}"
         )
+        self.reverb_transform = Reverb(dir_impulse_response)
+
         self.load_noise_db(crossfading_duration, sample_rate)
 
     def load_noise_db(
@@ -163,9 +167,12 @@ class AddNoise(Transform):
         # noise sequences one after the other
         frame_start = random.randint(0, self.size_noise - audio_nb_frames)
         noise_seq_torch = self.noise_data[frame_start : frame_start + audio_nb_frames]
+        noise_seq_reverb, labels_reverb = self.reverb_transform.__call__(
+            noise_seq_torch, sr, dict()
+        )
 
         audio_data_normalized = energy_normalization_on_vad(audio_data, label_dict[SPEECH_ACTIVITY_LABEL], sr)
-        noise = energy_normalization(noise_seq_torch) * noise_rms
+        noise = energy_normalization(noise_seq_reverb) * noise_rms
 
         y = peak_normalization(
             audio_data_normalized
