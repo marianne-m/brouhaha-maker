@@ -112,16 +112,20 @@ class AddNoise(Transform):
         random.shuffle(self.noise_files)
         previous_fade_end = torch.zeros(crossfade_frame)
         for x in tqdm.tqdm(self.noise_files, total=len(self.noise_files)):
-            noise_file = energy_normalization(torchaudio.load(x)[0].mean(dim=0))
+            noise_file = torchaudio.load(x)[0].mean(dim=0)
+            noise_file_reverb, _ = self.reverb_transform.__call__(
+                noise_file, sample_rate, dict()
+            )
+            noise_file_reverb = energy_normalization(noise_file_reverb)
 
-            fade_begin = make_ramp(noise_file[:crossfade_frame], 0, 1)
+            fade_begin = make_ramp(noise_file_reverb[:crossfade_frame], 0, 1)
             fade_begin = fade_begin + previous_fade_end
             noise_data.append(fade_begin)
 
-            noise_data.append(noise_file[crossfade_frame:-crossfade_frame])
+            noise_data.append(noise_file_reverb[crossfade_frame:-crossfade_frame])
 
-            previous_fade_end = make_ramp(noise_file[-crossfade_frame:], 1, 0)
-        noise_data.append(noise_file[-crossfade_frame:])
+            previous_fade_end = make_ramp(noise_file_reverb[-crossfade_frame:], 1, 0)
+        noise_data.append(noise_file_reverb[-crossfade_frame:])
 
         self.noise_data = torch.cat(noise_data, dim=0)
 
@@ -167,12 +171,9 @@ class AddNoise(Transform):
         # noise sequences one after the other
         frame_start = random.randint(0, self.size_noise - audio_nb_frames)
         noise_seq_torch = self.noise_data[frame_start : frame_start + audio_nb_frames]
-        noise_seq_reverb, labels_reverb = self.reverb_transform.__call__(
-            noise_seq_torch, sr, dict()
-        )
 
         audio_data_normalized = energy_normalization_on_vad(audio_data, label_dict[SPEECH_ACTIVITY_LABEL], sr)
-        noise = energy_normalization(noise_seq_reverb) * noise_rms
+        noise = energy_normalization(noise_seq_torch) * noise_rms
 
         y = peak_normalization(
             audio_data_normalized
