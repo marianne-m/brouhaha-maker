@@ -19,6 +19,7 @@ from typing import Any, Dict, Set, List, Tuple, Union
 SNR_NO_NOISE = 30
 CROSSFADE_MAX = 50
 SAMPLE_RATE = 16000
+AUDIOSET_SIZE = 8
 
 
 def compute_detailed_snr(
@@ -95,7 +96,6 @@ class AddNoise(Transform):
         print(
             f"Add noise to audio files with a random SNR between {snr_min} and {snr_max}"
         )
-        self.load_noise_db(crossfading_duration, sample_rate)
 
     def load_noise_db(
         self,
@@ -131,11 +131,11 @@ class AddNoise(Transform):
     ) -> torch.tensor:
         crossfade_frame = int(crossfade_sec * sample_rate)
         noise_data = []
-        noise_files = random.choices(self.noise_files, k=number_of_noise_files)
+        noise_files = random.sample(self.noise_files, number_of_noise_files)
 
         previous_fade_end = torch.zeros(crossfade_frame)
-        for x in tqdm.tqdm(noise_files, total=len(noise_files)):
-            noise_file = energy_normalization(torchaudio.load(x)[0].mean(dim=0))
+        for x in noise_files:
+            noise_file = torchaudio.load(x)[0].mean(dim=0)
 
             fade_begin = make_ramp(noise_file[:crossfade_frame], 0, 1)
             fade_begin = fade_begin + previous_fade_end
@@ -188,8 +188,8 @@ class AddNoise(Transform):
 
         # if noise sequences are shorter than the audio file, add different
         # noise sequences one after the other
-        nb = int(2 + audio_nb_frames / (10 * sr))
-        noise = self.load_noise_on_the_fly(nb)
+        noise_files_nb = int(audio_nb_frames/(AUDIOSET_SIZE*sr) + 2)
+        noise = self.load_noise_on_the_fly(noise_files_nb)
         frame_start = random.randint(0, noise.size(0) - audio_nb_frames)
         noise_seq_torch = noise[frame_start : frame_start + audio_nb_frames]
 
