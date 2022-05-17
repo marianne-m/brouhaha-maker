@@ -20,6 +20,7 @@ from typing import Any, Dict, Set, List, Tuple, Union
 SNR_NO_NOISE = 30
 CROSSFADE_MAX = 50
 SAMPLE_RATE = 16000
+AUDIOSET_SIZE = 8
 
 
 def compute_detailed_snr(
@@ -99,8 +100,6 @@ class AddNoise(Transform):
         )
         self.reverb_transform = Reverb(dir_impulse_response)
 
-        self.load_noise_db(crossfading_duration, sample_rate)
-
     def load_noise_db(
         self,
         crossfade_sec: float,
@@ -130,6 +129,33 @@ class AddNoise(Transform):
         self.noise_data = torch.cat(noise_data, dim=0)
 
         print("Dataset loaded")
+
+    def load_noise_on_the_fly(
+        self,
+        number_of_noise_files: int,
+        crossfade_sec:float = 0.5,
+        sample_rate:int = 16000
+    ) -> torch.tensor:
+        crossfade_frame = int(crossfade_sec * sample_rate)
+        noise_data = []
+        noise_files = random.sample(self.noise_files, number_of_noise_files)
+
+        previous_fade_end = torch.zeros(crossfade_frame)
+        for x in noise_files:
+            noise_file = torchaudio.load(x)[0].mean(dim=0)
+
+            fade_begin = make_ramp(noise_file[:crossfade_frame], 0, 1)
+            fade_begin = fade_begin + previous_fade_end
+            noise_data.append(fade_begin)
+
+            noise_data.append(noise_file[crossfade_frame:-crossfade_frame])
+
+            previous_fade_end = make_ramp(noise_file[-crossfade_frame:], 1, 0)
+        noise_data.append(noise_file[-crossfade_frame:])
+
+        noise_data = torch.cat(noise_data, dim=0)
+
+        return noise_data
 
     @property
     def input_labels(self) -> Set[str]:
@@ -169,8 +195,10 @@ class AddNoise(Transform):
 
         # if noise sequences are shorter than the audio file, add different
         # noise sequences one after the other
-        frame_start = random.randint(0, self.size_noise - audio_nb_frames)
-        noise_seq_torch = self.noise_data[frame_start : frame_start + audio_nb_frames]
+        noise_files_nb = int(audio_nb_frames/(AUDIOSET_SIZE*sr) + 2)
+        noise = self.load_noise_on_the_fly(noise_files_nb)
+        frame_start = random.randint(0, noise.size(0) - audio_nb_frames)
+        noise_seq_torch = noise[frame_start : frame_start + audio_nb_frames]
 
         audio_data_normalized = energy_normalization_on_vad(audio_data, label_dict[SPEECH_ACTIVITY_LABEL], sr)
         noise = energy_normalization(noise_seq_torch) * noise_rms
