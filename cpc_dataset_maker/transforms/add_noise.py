@@ -98,43 +98,14 @@ class AddNoise(Transform):
         print(
             f"Add noise to audio files with a random SNR between {snr_min} and {snr_max}"
         )
+        self.crossfading_duration = crossfading_duration
         self.reverb_transform = Reverb(dir_impulse_response)
-
-    def load_noise_db(
-        self,
-        crossfade_sec: float,
-        sample_rate: int
-    ) -> None:
-        print("Loading the noise dataset")
-        crossfade_frame = int(crossfade_sec * sample_rate)
-        noise_data = []
-        random.shuffle(self.noise_files)
-        previous_fade_end = torch.zeros(crossfade_frame)
-        for x in tqdm.tqdm(self.noise_files, total=len(self.noise_files)):
-            noise_file = torchaudio.load(x)[0].mean(dim=0)
-            noise_file_reverb, _ = self.reverb_transform.__call__(
-                noise_file, sample_rate, dict()
-            )
-            noise_file_reverb = energy_normalization(noise_file_reverb)
-
-            fade_begin = make_ramp(noise_file_reverb[:crossfade_frame], 0, 1)
-            fade_begin = fade_begin + previous_fade_end
-            noise_data.append(fade_begin)
-
-            noise_data.append(noise_file_reverb[crossfade_frame:-crossfade_frame])
-
-            previous_fade_end = make_ramp(noise_file_reverb[-crossfade_frame:], 1, 0)
-        noise_data.append(noise_file_reverb[-crossfade_frame:])
-
-        self.noise_data = torch.cat(noise_data, dim=0)
-
-        print("Dataset loaded")
 
     def load_noise_on_the_fly(
         self,
         number_of_noise_files: int,
-        crossfade_sec:float = 0.5,
-        sample_rate:int = 16000
+        crossfade_sec: float,
+        sample_rate: int
     ) -> torch.tensor:
         crossfade_frame = int(crossfade_sec * sample_rate)
         noise_data = []
@@ -143,15 +114,17 @@ class AddNoise(Transform):
         previous_fade_end = torch.zeros(crossfade_frame)
         for x in noise_files:
             noise_file = torchaudio.load(x)[0].mean(dim=0)
-
-            fade_begin = make_ramp(noise_file[:crossfade_frame], 0, 1)
+            noise_file_reverb, _ = self.reverb_transform.__call__(
+                noise_file, sample_rate, dict()
+            )
+            fade_begin = make_ramp(noise_file_reverb[:crossfade_frame], 0, 1)
             fade_begin = fade_begin + previous_fade_end
             noise_data.append(fade_begin)
 
-            noise_data.append(noise_file[crossfade_frame:-crossfade_frame])
+            noise_data.append(noise_file_reverb[crossfade_frame:-crossfade_frame])
 
-            previous_fade_end = make_ramp(noise_file[-crossfade_frame:], 1, 0)
-        noise_data.append(noise_file[-crossfade_frame:])
+            previous_fade_end = make_ramp(noise_file_reverb[-crossfade_frame:], 1, 0)
+        noise_data.append(noise_file_reverb[-crossfade_frame:])
 
         noise_data = torch.cat(noise_data, dim=0)
 
@@ -196,7 +169,7 @@ class AddNoise(Transform):
         # if noise sequences are shorter than the audio file, add different
         # noise sequences one after the other
         noise_files_nb = int(audio_nb_frames/(AUDIOSET_SIZE*sr) + 2)
-        noise = self.load_noise_on_the_fly(noise_files_nb)
+        noise = self.load_noise_on_the_fly(noise_files_nb, self.crossfading_duration, sr)
         frame_start = random.randint(0, noise.size(0) - audio_nb_frames)
         noise_seq_torch = noise[frame_start : frame_start + audio_nb_frames]
 
