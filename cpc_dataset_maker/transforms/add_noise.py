@@ -1,11 +1,10 @@
-from numpy import log10, cumsum, arange, square, zeros_like
 from copy import deepcopy
 import random
-from copy import deepcopy
 from pathlib import Path
+from typing import Any, Dict, Set, List, Tuple, Union
+from numpy import log10, cumsum, arange, square, zeros_like
 import torch
 import torchaudio
-import tqdm
 from cpc_dataset_maker.transforms.transform import Transform
 from cpc_dataset_maker.transforms.add_reverb import Reverb
 from cpc_dataset_maker.transforms.labels import SNR_LABEL, DETAILED_SNR, RMS_LABEL, SPEECH_ACTIVITY_LABEL
@@ -15,7 +14,7 @@ from cpc_dataset_maker.transforms.normalization import (
     energy_normalization_on_vad,
     peak_normalization,
 )
-from typing import Any, Dict, Set, List, Tuple, Union
+
 
 SNR_NO_NOISE = 30
 CROSSFADE_MAX = 50
@@ -83,7 +82,6 @@ class AddNoise(Transform):
         snr_min: float = 0.1,
         snr_max: float = 0.9 * SNR_NO_NOISE,
         snr_no_noise: float = SNR_NO_NOISE,
-        sample_rate: int = SAMPLE_RATE,
         crossfading_duration: float = 0.5
     ):
         self.dir_noise = Path(dir_noise)
@@ -106,7 +104,7 @@ class AddNoise(Transform):
         number_of_noise_files: int,
         crossfade_sec: float,
         sample_rate: int
-    ) -> torch.tensor:
+    ) -> torch.Tensor:
         crossfade_frame = int(crossfade_sec * sample_rate)
         noise_data = []
         noise_files = random.sample(self.noise_files, number_of_noise_files)
@@ -139,10 +137,6 @@ class AddNoise(Transform):
         return {RMS_LABEL, SNR_LABEL, DETAILED_SNR}
 
     @property
-    def size_noise(self) -> int:
-        return len(self.noise_data)
-
-    @property
     def init_params(self) -> Dict[str, Any]:
         return {
             "ext_noise": self.ext_noise,
@@ -154,8 +148,8 @@ class AddNoise(Transform):
         }
 
     def __call__(
-        self, audio_data: torch.tensor, sr: int, label_dict: Dict[str, Any]
-    ) -> Tuple[torch.tensor, Dict[str, Any]]:
+        self, audio_data: torch.Tensor, sr: int, label_dict: Dict[str, Any]
+    ) -> Tuple[torch.Tensor, Dict[str, Any]]:
 
         audio_nb_frames = audio_data.size(0)
 
@@ -173,7 +167,11 @@ class AddNoise(Transform):
         frame_start = random.randint(0, noise.size(0) - audio_nb_frames)
         noise_seq_torch = noise[frame_start : frame_start + audio_nb_frames]
 
-        audio_data_normalized = energy_normalization_on_vad(audio_data, label_dict[SPEECH_ACTIVITY_LABEL], sr)
+        audio_data_normalized = energy_normalization_on_vad(
+            audio_data,
+            label_dict[SPEECH_ACTIVITY_LABEL],
+            sr
+        )
         noise = energy_normalization(noise_seq_torch) * noise_rms
 
         y = peak_normalization(
