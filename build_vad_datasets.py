@@ -187,7 +187,8 @@ def parse_args():
         "--dir-ir-on-noise",
         type=str,
         help="Directory containing a set of impulse responses for the"
-             "reverberation of noise segments",
+             "reverberation of noise segments."
+             "If no directory is given, the noise is added without reverberation",
     )
 
     parser_segment = subparsers.add_parser("segmentation")

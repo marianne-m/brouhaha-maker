@@ -38,7 +38,7 @@ class Reverb(Transform):
         self,
         dir_impulse_response: Union[str, Path],
         tau: float = 50,
-        ext_impulse: str = ".wav",
+        ext_impulse: str = ".flac",
         proba_no_reverb: float = PROBA_NO_REVERB,
     ):
         super().__init__()
