@@ -1,12 +1,13 @@
-from numpy import log10, cumsum, arange, square, zeros_like
 from copy import deepcopy
 import random
-from copy import deepcopy
 from pathlib import Path
+from this import d
+from typing import Any, Dict, Set, List, Tuple, Union
+from numpy import log10, cumsum, arange, square, zeros_like
 import torch
 import torchaudio
-import tqdm
 from cpc_dataset_maker.transforms.transform import Transform
+from cpc_dataset_maker.transforms.add_reverb import Reverb
 from cpc_dataset_maker.transforms.labels import SNR_LABEL, DETAILED_SNR, RMS_LABEL, SPEECH_ACTIVITY_LABEL
 from cpc_dataset_maker.transforms.extend_silences import make_ramp
 from cpc_dataset_maker.transforms.normalization import (
@@ -14,11 +15,12 @@ from cpc_dataset_maker.transforms.normalization import (
     energy_normalization_on_vad,
     peak_normalization,
 )
-from typing import Any, Dict, Set, List, Tuple, Union
+
 
 SNR_NO_NOISE = 30
 CROSSFADE_MAX = 50
 SAMPLE_RATE = 16000
+AUDIOSET_SIZE = 8
 
 
 def compute_detailed_snr(
@@ -76,11 +78,11 @@ class AddNoise(Transform):
     def __init__(
         self,
         dir_noise: Union[str, Path],
+        dir_impulse_response: Union[str, Path] = None,
         ext_noise: str = ".flac",
         snr_min: float = 0.1,
         snr_max: float = 0.9 * SNR_NO_NOISE,
         snr_no_noise: float = SNR_NO_NOISE,
-        sample_rate: int = SAMPLE_RATE,
         crossfading_duration: float = 0.5
     ):
         self.dir_noise = Path(dir_noise)
@@ -95,21 +97,30 @@ class AddNoise(Transform):
         print(
             f"Add noise to audio files with a random SNR between {snr_min} and {snr_max}"
         )
-        self.load_noise_db(crossfading_duration, sample_rate)
+        self.crossfading_duration = crossfading_duration
 
-    def load_noise_db(
+        # if no dir_impulse_response is given, the noise is added without reverberation
+        # else, an impulse response is applied to the noise
+        if dir_impulse_response :
+            print("Noise dataset is applied with reverberation")
+            self.reverb_transform = Reverb(dir_impulse_response)
+            self.load_noise = self.load_with_reverb
+        else:
+            print("Noise dataset is applied without reverberation")
+            self.load_noise = self.simple_load
+
+    def load_noise_on_the_fly(
         self,
-        crossfade_sec: float,
+        number_of_noise_files: int,
         sample_rate: int
-    ) -> None:
-        print("Loading the noise dataset")
-        crossfade_frame = int(crossfade_sec * sample_rate)
+    ) -> torch.Tensor:
+        crossfade_frame = int(self.crossfading_duration * sample_rate)
         noise_data = []
-        random.shuffle(self.noise_files)
-        previous_fade_end = torch.zeros(crossfade_frame)
-        for x in tqdm.tqdm(self.noise_files, total=len(self.noise_files)):
-            noise_file = energy_normalization(torchaudio.load(x)[0].mean(dim=0))
+        noise_files = random.sample(self.noise_files, number_of_noise_files)
 
+        previous_fade_end = torch.zeros(crossfade_frame)
+        for x in noise_files:
+            noise_file = self.load_noise(x, sample_rate)
             fade_begin = make_ramp(noise_file[:crossfade_frame], 0, 1)
             fade_begin = fade_begin + previous_fade_end
             noise_data.append(fade_begin)
@@ -119,9 +130,9 @@ class AddNoise(Transform):
             previous_fade_end = make_ramp(noise_file[-crossfade_frame:], 1, 0)
         noise_data.append(noise_file[-crossfade_frame:])
 
-        self.noise_data = torch.cat(noise_data, dim=0)
+        noise_data = torch.cat(noise_data, dim=0)
 
-        print("Dataset loaded")
+        return noise_data
 
     @property
     def input_labels(self) -> Set[str]:
@@ -130,10 +141,6 @@ class AddNoise(Transform):
     @property
     def output_labels(self) -> Set[str]:
         return {RMS_LABEL, SNR_LABEL, DETAILED_SNR}
-
-    @property
-    def size_noise(self) -> int:
-        return len(self.noise_data)
 
     @property
     def init_params(self) -> Dict[str, Any]:
@@ -147,8 +154,8 @@ class AddNoise(Transform):
         }
 
     def __call__(
-        self, audio_data: torch.tensor, sr: int, label_dict: Dict[str, Any]
-    ) -> Tuple[torch.tensor, Dict[str, Any]]:
+        self, audio_data: torch.Tensor, sr: int, label_dict: Dict[str, Any]
+    ) -> Tuple[torch.Tensor, Dict[str, Any]]:
 
         audio_nb_frames = audio_data.size(0)
 
@@ -161,10 +168,16 @@ class AddNoise(Transform):
 
         # if noise sequences are shorter than the audio file, add different
         # noise sequences one after the other
-        frame_start = random.randint(0, self.size_noise - audio_nb_frames)
-        noise_seq_torch = self.noise_data[frame_start : frame_start + audio_nb_frames]
+        noise_files_nb = int(audio_nb_frames/(AUDIOSET_SIZE*sr) + 2)
+        noise = self.load_noise_on_the_fly(noise_files_nb, sr)
+        frame_start = random.randint(0, noise.size(0) - audio_nb_frames)
+        noise_seq_torch = noise[frame_start : frame_start + audio_nb_frames]
 
-        audio_data_normalized = energy_normalization_on_vad(audio_data, label_dict[SPEECH_ACTIVITY_LABEL], sr)
+        audio_data_normalized = energy_normalization_on_vad(
+            audio_data,
+            label_dict[SPEECH_ACTIVITY_LABEL],
+            sr
+        )
         noise = energy_normalization(noise_seq_torch) * noise_rms
 
         y = peak_normalization(
@@ -182,3 +195,21 @@ class AddNoise(Transform):
         )
 
         return y, new_labels
+
+    def load_with_reverb(
+        self,
+        waveform: torch.Tensor,
+        sample_rate: int
+    ) -> torch.Tensor:
+        noise_file = torchaudio.load(waveform)[0].mean(dim=0)
+        noise_file_reverb, _ = self.reverb_transform.__call__(
+            noise_file, sample_rate, dict()
+        )
+        return noise_file_reverb
+
+    @staticmethod
+    def simple_load(
+        waveform: torch.Tensor,
+        sample_rate: int
+    ) -> torch.Tensor:
+        return torchaudio.load(waveform)[0].mean(dim=0)

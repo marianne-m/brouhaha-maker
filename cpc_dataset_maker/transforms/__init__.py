@@ -27,6 +27,7 @@ def get_transform(transform_type: str, **kwargs):
     if transform_type == "noise":
         return AddNoise(
             dir_noise=kwargs["dir_noise"],
+            dir_impulse_response=kwargs["dir_ir_on_noise"],
             ext_noise=kwargs["ext_noise"],
             snr_min=kwargs["snr_min"],
             snr_max=kwargs["snr_max"],
