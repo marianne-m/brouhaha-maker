@@ -1,6 +1,7 @@
 from copy import deepcopy
 import json
 from pathlib import Path
+from functools import partial
 import torch
 import torchaudio
 import tqdm
@@ -36,7 +37,7 @@ class Transform:
         )
 
     def __call__(
-        self, audio_data: torch.tensor, sr: int, label_dict: Dict[str, Any]
+        self, audio_data: torch.tensor, sr: int, label_dict: Dict[str, Any], detailed_path: Path
     ) -> Tuple[torch.tensor, Dict[str, Any]]:
         raise RuntimeError(
             f"Call function not implemented for {self.__class__.__name__}"
@@ -47,17 +48,20 @@ class Transform:
         with open(path_out, "w") as f_:
             json.dump(self.json_params, f_, indent=2)
 
-    def _run_on_file(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def _run_on_file(self, data: Dict[str, Any], path_detailed: Path) -> Dict[str, Any]:
 
         path_in = data[INPUT_PATH_KEY]
         path_out = data[OUTPUT_PATH_KEY]
         labels = data[LABELS_KEY]
 
         path_out.parent.mkdir(exist_ok=True)
+        detailed_out = Path(path_detailed / path_in.stem)
+        detailed_out.mkdir(exist_ok=True)
 
         audio, sr = torchaudio.load(str(path_in))
         audio = audio.mean(dim=0)
-        new_audio, new_labels = self.__call__(audio, sr, labels)
+        torchaudio.save(detailed_out / "original_speech.flac", audio.view(1, -1), sr)
+        new_audio, new_labels = self.__call__(audio, sr, labels, detailed_out)
         torchaudio.save(str(path_out), new_audio.view(1, -1), sr)
         return {OUTPUT_PATH_KEY: str(path_out), LABELS_KEY: new_labels}
 
@@ -66,12 +70,13 @@ class Transform:
         list_path_labels: List[Dict[str, Any]],
         n_process: int = 10,
         chunksize: int = 10,
+        path_detailed: Path = None
     ) -> List[Dict[str, Any]]:
 
         with Pool(n_process) as p:
             r = list(
                 tqdm.tqdm(
-                    p.imap(self._run_on_file, list_path_labels, chunksize=chunksize),
+                    p.imap(partial(self._run_on_file, path_detailed=path_detailed), list_path_labels, chunksize=chunksize),
                     total=len(list_path_labels),
                 )
             )
@@ -104,12 +109,12 @@ class CombinedTransform(Transform):
         return [x.json_params for x in self.transforms]
 
     def __call__(
-        self, audio_data: torch.tensor, sr: int, label_dict: Dict[str, Any]
+        self, audio_data: torch.tensor, sr: int, label_dict: Dict[str, Any], detailed_path: Path
     ) -> Tuple[torch.tensor, Dict[str, Any]]:
 
         new_audio = audio_data
         new_labels = label_dict
         for transform in self.transforms:
-            new_audio, new_labels = transform(new_audio, sr, new_labels)
+            new_audio, new_labels = transform(new_audio, sr, new_labels, detailed_path)
 
         return new_audio, new_labels

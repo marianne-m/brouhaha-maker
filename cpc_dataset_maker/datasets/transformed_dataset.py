@@ -30,6 +30,7 @@ class TransformDataset(Dataset):
             root=root,
             dataset_name=dataset_name,
         )
+        self.detailed_steps = Path(self.root / "detailed_steps")
         print("Transformed dataset")
 
     @property
@@ -39,6 +40,7 @@ class TransformDataset(Dataset):
     def init_audio_labels(self, paths_in: List[Path]) -> List[Dict[str, Any]]:
 
         self.path_16k.mkdir(exist_ok=True)
+        self.detailed_steps.mkdir(exist_ok=True)
         out = []
         for x in paths_in:
             out += [
@@ -61,7 +63,7 @@ class TransformDataset(Dataset):
 
         print(f"{len(labels)} audio files to transform")
         new_labels = transform.run_on_dataset(
-            labels, n_process=n_process, chunksize=chunksize
+            labels, n_process=n_process, chunksize=chunksize, path_detailed=self.detailed_steps
         )
         transform.save(self.path_transform)
 

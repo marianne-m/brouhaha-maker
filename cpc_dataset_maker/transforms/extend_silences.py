@@ -3,6 +3,7 @@ import os
 import random
 import numpy as np
 import torch
+import torchaudio
 import math
 from typing import Any, Dict, List, Optional, Tuple, Union, Set
 from pathlib import Path
@@ -325,7 +326,7 @@ class ExtendSilenceTransform(Transform):
         }
 
     def __call__(
-        self, audio_data: torch.tensor, sr: int, label_dict: Dict[str, Any]
+        self, audio_data: torch.tensor, sr: int, label_dict: Dict[str, Any], path_detailed: Path
     ) -> Tuple[torch.tensor, Dict[str, Any]]:
 
         new_audio, new_speech_activity = expand_audio_and_timeline(
@@ -339,7 +340,7 @@ class ExtendSilenceTransform(Transform):
             expand_silence_only=self.expand_silence_only,
             sil_min_sec=self.sil_min_sec
         )
-
+        torchaudio.save(path_detailed / "extended_silences.flac", new_audio.view(1, -1), sr)
         new_labels = deepcopy(label_dict)
         new_labels[SPEECH_ACTIVITY_LABEL] = new_speech_activity
 

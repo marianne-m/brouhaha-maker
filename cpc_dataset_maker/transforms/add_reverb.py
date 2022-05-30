@@ -89,7 +89,7 @@ class Reverb(Transform):
             self.c50list.append(get_clarity(audio, sr, self.tau))
 
     def __call__(
-        self, audio_data: torch.tensor, sr: int, label_dict: Dict[str, Any]
+        self, audio_data: torch.tensor, sr: int, label_dict: Dict[str, Any], detailed_path: Path, save: bool = True
     ) -> Tuple[torch.tensor, Dict[str, Any]]:
 
         new_labels = deepcopy(label_dict)
@@ -104,6 +104,9 @@ class Reverb(Transform):
         effect = ApplyImpulseResponse(  # apply reverberation
             ir_paths=[path_impulse], p=1, sample_rate=sr
         )
+
+        if save:
+            torchaudio.save(detailed_path / "reverb.flac", effect(audio_data.view(1, 1, -1)).view(-1).view(1, -1), sr)
 
         new_labels[REVERB_LABEL] = self.c50list[index_impulse]
         new_labels[IMPULSE_RESPONSE_LABEL] = str(self.responses[index_impulse])

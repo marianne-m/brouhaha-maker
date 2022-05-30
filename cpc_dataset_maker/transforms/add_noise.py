@@ -1,3 +1,4 @@
+from audioop import cross
 from copy import deepcopy
 import random
 from pathlib import Path
@@ -112,27 +113,39 @@ class AddNoise(Transform):
     def load_noise_on_the_fly(
         self,
         number_of_noise_files: int,
-        sample_rate: int
+        sample_rate: int,
+        detailed_path: Path
     ) -> torch.Tensor:
         crossfade_frame = int(self.crossfading_duration * sample_rate)
         noise_data = []
+        noise_data_reverb = []
         noise_files = random.sample(self.noise_files, number_of_noise_files)
 
         previous_fade_end = torch.zeros(crossfade_frame)
+        previous_fade_end_reverb = torch.zeros(crossfade_frame)
+        # TODO : faire avec et sans reverb, et return les 2
         for x in noise_files:
-            noise_file = self.load_noise(x, sample_rate)
+            noise_file = self.simple_load(x, sample_rate, detailed_path)
             fade_begin = make_ramp(noise_file[:crossfade_frame], 0, 1)
             fade_begin = fade_begin + previous_fade_end
             noise_data.append(fade_begin)
-
             noise_data.append(noise_file[crossfade_frame:-crossfade_frame])
-
             previous_fade_end = make_ramp(noise_file[-crossfade_frame:], 1, 0)
-        noise_data.append(noise_file[-crossfade_frame:])
 
+            noise_file_reverb = self.load_with_reverb(x, sample_rate, detailed_path)
+            fade_begin_reverb = make_ramp(noise_file_reverb[:crossfade_frame], 0, 1)
+            fade_begin_reverb = fade_begin_reverb + previous_fade_end_reverb
+            noise_data_reverb.append(fade_begin_reverb)
+            noise_data_reverb.append(noise_file_reverb[crossfade_frame:-crossfade_frame])
+            previous_fade_end_reverb = make_ramp(noise_file_reverb[-crossfade_frame:], 1, 0)
+ 
+        noise_data.append(noise_file[-crossfade_frame:])
         noise_data = torch.cat(noise_data, dim=0)
 
-        return noise_data
+        noise_data_reverb.append(noise_file_reverb[-crossfade_frame:])
+        noise_data_reverb = torch.cat(noise_data_reverb, dim=0)
+
+        return noise_data, noise_data_reverb
 
     @property
     def input_labels(self) -> Set[str]:
@@ -154,7 +167,7 @@ class AddNoise(Transform):
         }
 
     def __call__(
-        self, audio_data: torch.Tensor, sr: int, label_dict: Dict[str, Any]
+        self, audio_data: torch.Tensor, sr: int, label_dict: Dict[str, Any], detailed_path: Path
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
 
         audio_nb_frames = audio_data.size(0)
@@ -169,9 +182,13 @@ class AddNoise(Transform):
         # if noise sequences are shorter than the audio file, add different
         # noise sequences one after the other
         noise_files_nb = int(audio_nb_frames/(AUDIOSET_SIZE*sr) + 2)
-        noise = self.load_noise_on_the_fly(noise_files_nb, sr)
+        noise, noise_reverb = self.load_noise_on_the_fly(noise_files_nb, sr, detailed_path)
         frame_start = random.randint(0, noise.size(0) - audio_nb_frames)
-        noise_seq_torch = noise[frame_start : frame_start + audio_nb_frames]
+        noise_seq_torch_before_reverb = noise[frame_start : frame_start + audio_nb_frames]
+        noise_seq_torch = noise_reverb[frame_start : frame_start + audio_nb_frames]
+
+        torchaudio.save(detailed_path / "noise.flac", noise_seq_torch_before_reverb.view(1, -1), sr)
+        torchaudio.save(detailed_path / "noise_with_reverb.flac", noise_seq_torch.view(1, -1), sr)
 
         audio_data_normalized = energy_normalization_on_vad(
             audio_data,
@@ -194,22 +211,26 @@ class AddNoise(Transform):
             label_dict[SPEECH_ACTIVITY_LABEL]
         )
 
+        torchaudio.save(detailed_path / "final.flac", y.view(1, -1), sr)
+
         return y, new_labels
 
     def load_with_reverb(
         self,
         waveform: torch.Tensor,
-        sample_rate: int
+        sample_rate: int,
+        detailed_path: Path
     ) -> torch.Tensor:
         noise_file = torchaudio.load(waveform)[0].mean(dim=0)
         noise_file_reverb, _ = self.reverb_transform.__call__(
-            noise_file, sample_rate, dict()
+            noise_file, sample_rate, dict(), detailed_path, save=False
         )
         return noise_file_reverb
 
     @staticmethod
     def simple_load(
         waveform: torch.Tensor,
-        sample_rate: int
+        sample_rate: int,
+        detailed_path: Path
     ) -> torch.Tensor:
         return torchaudio.load(waveform)[0].mean(dim=0)
