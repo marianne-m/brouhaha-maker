@@ -81,7 +81,7 @@ class AddNoise(Transform):
         dir_impulse_response: Union[str, Path] = None,
         ext_noise: str = ".flac",
         snr_min: float = 0,
-        snr_max: float = SNR_NO_NOISE,
+        snr_max: float = 0.9 * SNR_NO_NOISE,
         snr_no_noise: float = SNR_NO_NOISE,
         crossfading_duration: float = CROSSFADE_MAX
     ):
