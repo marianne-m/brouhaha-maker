@@ -18,9 +18,10 @@ from cpc_dataset_maker.transforms.normalization import (
 
 
 SNR_NO_NOISE = 30
-CROSSFADE_MAX = 50
+CROSSFADE_MAX = 0.05
 SAMPLE_RATE = 16000
 AUDIOSET_SIZE = 8
+SAMPLE_MAX = 200
 
 
 def compute_detailed_snr(
@@ -111,27 +112,30 @@ class AddNoise(Transform):
 
     def load_noise_on_the_fly(
         self,
-        number_of_noise_files: int,
+        audio_nb_frames: int,
         sample_rate: int
     ) -> torch.Tensor:
         crossfade_frame = int(self.crossfading_duration * sample_rate)
         noise_data = []
-        noise_files = random.sample(self.noise_files, number_of_noise_files)
+        noise_files = random.sample(self.noise_files, SAMPLE_MAX)
 
         previous_fade_end = torch.zeros(crossfade_frame)
-        for x in noise_files:
-            noise_file = self.load_noise(x, sample_rate)
+
+        index_noise_file = 0
+        while len(noise_data) < 2*audio_nb_frames:
+            noise_file = self.load_noise(noise_files[index_noise_file], sample_rate)
+
             fade_begin = make_ramp(noise_file[:crossfade_frame], 0, 1)
             fade_begin = fade_begin + previous_fade_end
             noise_data.append(fade_begin)
-
             noise_data.append(noise_file[crossfade_frame:-crossfade_frame])
-
             previous_fade_end = make_ramp(noise_file[-crossfade_frame:], 1, 0)
+
+            index_noise_file += 1
+
         noise_data.append(noise_file[-crossfade_frame:])
 
         noise_data = torch.cat(noise_data, dim=0)
-
         return noise_data
 
     @property
