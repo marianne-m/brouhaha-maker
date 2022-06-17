@@ -3,7 +3,7 @@ import random
 from pathlib import Path
 from this import d
 from typing import Any, Dict, Set, List, Tuple, Union
-from numpy import log10, cumsum, arange, square, zeros_like
+import numpy as np
 import torch
 import torchaudio
 from cpc_dataset_maker.transforms.transform import Transform
@@ -22,6 +22,8 @@ CROSSFADE_MAX = 0.05
 SAMPLE_RATE = 16000
 AUDIOSET_SIZE = 8
 SAMPLE_MAX = 200
+WINDOW_STEP = 0.01
+WINDOW_SIZE = 2
 
 
 def compute_detailed_snr(
@@ -29,8 +31,8 @@ def compute_detailed_snr(
     noise: torch.Tensor,
     sample_rate: int,
     vad: List[Tuple[float, float]],
-    step: float = 0.01,
-    window_size: int = 2
+    step: float = WINDOW_STEP,
+    window_size: int = WINDOW_SIZE
 ) -> List[List[float]]:
     """
     Compute the mean snr every step on a sliding window of size window_size.
@@ -39,17 +41,17 @@ def compute_detailed_snr(
     window_frames = int(window_size * sample_rate)
     step_in_frames = int(step * sample_rate)
 
-    vad_mask = zeros_like(audio_data)
+    vad_mask = np.zeros_like(audio_data)
     vad_frame = [(int(st*sample_rate), int(end*sample_rate)) for st, end in vad]
     for start_speech_activity, end_speech_activity in vad_frame:
         vad_mask[start_speech_activity:end_speech_activity] = 1
     audio_data = audio_data * vad_mask  
 
-    power_audio = cumsum(square(audio_data))
-    power_noise = cumsum(square(noise))
+    power_audio = np.cumsum(np.square(audio_data))
+    power_noise = np.cumsum(np.square(noise))
 
-    start_windows = arange(0, audio_data.size(0) - window_frames + 1, step_in_frames)
-    end_windows = arange(window_frames - 1, audio_data.size(0), step_in_frames)  
+    start_windows = np.arange(0, audio_data.size(0) - window_frames + 1, step_in_frames)
+    end_windows = np.arange(window_frames - 1, audio_data.size(0), step_in_frames)  
 
     # max(signal_to_noise, 10**(-10)) so the snr_db is equal to -100 when the signal is 0
     signal_to_noise = [
@@ -59,19 +61,14 @@ def compute_detailed_snr(
         ) for start, end in zip(start_windows, end_windows)
     ]
 
-    snr_db = 10 * log10(signal_to_noise)
-    detailed_snr = zip(start_windows, end_windows, snr_db)
+    snr_db = 10 * np.log10(signal_to_noise)
 
-    return detailed_snr
+    return snr_db
 
 
 def save_detailed_snr_labels(values: List[float], file_path: Union[Path, str]) -> None:
-    seq_name = Path(file_path).stem
-    with open(file_path, "w") as rttm_file:
-        for start, end, snr in values:
-            rttm_file.write(
-                f"{seq_name} {start} {end} {snr}\n"
-            )
+    with open(file_path, 'wb') as snr_file:
+        np.save(snr_file, values)
 
 
 # add noise to audio files
@@ -84,7 +81,9 @@ class AddNoise(Transform):
         snr_min: float = 0,
         snr_max: float = 0.9 * SNR_NO_NOISE,
         snr_no_noise: float = SNR_NO_NOISE,
-        crossfading_duration: float = CROSSFADE_MAX
+        crossfading_duration: float = CROSSFADE_MAX,
+        window_step: float = WINDOW_STEP,
+        window_size: float = WINDOW_SIZE
     ):
         self.dir_noise = Path(dir_noise)
         self.noise_files = [
@@ -99,6 +98,8 @@ class AddNoise(Transform):
             f"Add noise to audio files with a random SNR between {snr_min} and {snr_max}"
         )
         self.crossfading_duration = crossfading_duration
+        self.window_size = window_size
+        self.window_step = window_step
 
         # if no dir_impulse_response is given, the noise is added without reverberation
         # else, an impulse response is applied to the noise
@@ -155,6 +156,9 @@ class AddNoise(Transform):
             "snr_min": self.snr_min,
             "snr_max": self.snr_max,
             "snr_no_noise": self.snr_no_noise,
+            "crossfading_duration": self.crossfading_duration,
+            "window_step": self.window_step,
+            "window_size": self.window_size
         }
 
     def __call__(
@@ -195,7 +199,9 @@ class AddNoise(Transform):
             audio_data_normalized,
             noise,
             sr,
-            label_dict[SPEECH_ACTIVITY_LABEL]
+            label_dict[SPEECH_ACTIVITY_LABEL],
+            self.window_step,
+            self.window_size
         )
 
         return y, new_labels

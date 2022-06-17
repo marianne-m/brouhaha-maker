@@ -393,7 +393,7 @@ class Dataset:
         self.path_detailed_snr_labels.mkdir(exist_ok=True)
         for file_path, value in data.items():
             save_detailed_snr_labels(
-                value, self.path_detailed_snr_labels / f"{Path(file_path).stem}_snr.txt"
+                value, self.path_detailed_snr_labels / f"{Path(file_path).stem}_snr.npy"
             )
 
     def create_phone_labels(self, *args) -> None:
