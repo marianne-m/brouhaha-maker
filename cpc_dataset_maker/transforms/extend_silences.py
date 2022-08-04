@@ -40,6 +40,16 @@ def check_sil_seq(silences: List[Tuple[int, int]], crossfade_frame):
         raise RuntimeError("You can only have one silence before the sequence")
 
 
+def add_crossfading(data: torch.Tensor, crossfade_frame: int, start=True, end=True):
+    if start:
+        min_crossfading = len(data[0:crossfade_frame])
+        data[0:crossfade_frame] = torch.linspace(0, 1, min(crossfade_frame, min_crossfading)) * data[0:crossfade_frame]
+    if end:
+        min_crossfading = len(data[-crossfade_frame:])
+        data[-crossfade_frame:] = torch.linspace(1, 0, min(crossfade_frame, min_crossfading)) * data[-crossfade_frame:]
+    return data
+
+
 def add_silences_to_speech_mono(
     audio_data: torch.tensor, silences: List[Tuple[int, int]], crossfade_frame: int
 ) -> torch.tensor:
@@ -48,54 +58,26 @@ def add_silences_to_speech_mono(
 
     silences.sort(key=lambda x: x[0])
     out = []
-    last_frame_end = 0
-    ramp_last = False
+    previous_start = 0
+    start_crossfading = False
+    end_crossfading = True
 
     if silences[0][0] < 0:
-        duration = silences[0][1]
-        out.append(torch.zeros(duration - crossfade_frame, dtype=torch.float))
+        out.append(torch.zeros(silences[0][1]))
         silences = silences[1:]
-        ramp_last = True
+        start_crossfading = True
 
-    for frame_start, duration in silences:
-        shift = 0
-        if ramp_last:
-            out.append(
-                make_ramp(
-                    audio_data[last_frame_end : last_frame_end + crossfade_frame], 0, 1
-                )
-            )
-            shift = last_frame_end + crossfade_frame
-        if shift > frame_start:
-            raise RuntimeError("Speech activity smaller than crossfade")
-        out.append(audio_data[shift:frame_start])
-        out.append(
-            make_ramp(audio_data[frame_start : frame_start + crossfade_frame], 1, 0)
-        )
-        n_zeros = duration - out[-1].size(0)
-        if frame_start + duration < audio_data.size(0):
-            n_zeros -= crossfade_frame
-            last_frame_end = frame_start + crossfade_frame
-        else:
-            last_frame_end = audio_data.size(0)
-        if n_zeros < 0:
-            raise RuntimeError("Crossfade larger than silence")
-        out.append(
-            torch.zeros(
-                n_zeros,
-                device=audio_data.device,
-                dtype=audio_data.dtype,
-            )
-        )
-        ramp_last = True
+    for silence_start, duration in silences:
+        audio_chunk = audio_data[previous_start:silence_start]
+        audio = add_crossfading(audio_chunk, crossfade_frame, start_crossfading, end_crossfading)
+        out.append(audio)
+        out.append(torch.zeros(duration))
+        start_crossfading = True
+        previous_start = silence_start
+    
+    audio_chunk = audio_data[previous_start:]
+    out.append(add_crossfading(audio_chunk, crossfade_frame, True, False))
 
-    if last_frame_end < audio_data.size(0):
-        out.append(
-            make_ramp(
-                audio_data[last_frame_end : last_frame_end + crossfade_frame], 0, 1
-            )
-        )
-        out.append(audio_data[last_frame_end + crossfade_frame :])
 
     return torch.cat(out, dim=0)
 
@@ -104,41 +86,19 @@ def update_speech_activity_from_new_silence(
     old_speech_activity: List[Tuple[float, float]], silences: List[Tuple[float, float]]
 ) -> List[Tuple[float, float]]:
 
-    new_timeline = []
-    offset_start, offset_end = 0, 0
-    i_old_timeline = 0
-    o_speech_start, o_speech_end = old_speech_activity[0]
-    for sil_start, sil_duration in silences:
-        while o_speech_end < sil_start:
-            new_timeline.append((o_speech_start + offset_start, o_speech_end + offset_end))
-            offset_start = offset_end
-            i_old_timeline += 1
+    new_speech_activity = old_speech_activity.copy()
+    for silence_start, duration in silences:
+        speech_activity_iter = iter(old_speech_activity)
+        
+        # let's find the speech activity index immediately after the silence insertion
+        shift_index = 0
+        while (speech_activity := next(speech_activity_iter, None)) and speech_activity[0] < silence_start: # affectation only in python > 3.8
+            shift_index +=1
 
-            if i_old_timeline >= len(old_speech_activity):
-                return new_timeline
-            else:
-                o_speech_start, o_speech_end = old_speech_activity[i_old_timeline]
-        if sil_start <= o_speech_start:
-            offset_end += sil_duration
-            offset_start += sil_duration
-        elif sil_start < o_speech_end:
-            offset_end += sil_duration
-            if o_speech_start < sil_start:
-                new_timeline.append(
-                    (o_speech_start + offset_start, sil_start + offset_start)
-                )
-            o_speech_start = sil_start
-            offset_start += sil_duration
-        else:
-            offset_end += sil_duration
-            offset_start = offset_end
+        # speech activity after the silence insertion is shifted by the duration of the silence
+        new_speech_activity[shift_index:] = [(start + duration, end + duration) for (start, end) in new_speech_activity[shift_index:]]
 
-    new_timeline.append((o_speech_start + offset_start, o_speech_end + offset_end))
-    offset_end = offset_start
-    for start, end in old_speech_activity[i_old_timeline + 1 :]:
-        new_timeline.append((start + offset_start, end + offset_end))
-
-    return new_timeline
+    return new_speech_activity
 
 
 def draw_sil(
@@ -258,19 +218,9 @@ def expand_audio_and_timeline(
             (int(x * sample_rate), int(dur * sample_rate)) for x, dur in sil_tuples_sec
         ]
     else:
-        sil_tuples_frames = merge_sils(
-            draw_sil(
-                n_frames_in=audio_data.size(0),
-                proba_off=proba_off,
-                n_frames_crossfade=n_frames_crossfade,
-                mean_sil=sil_mean_frame,
-                std_sil=sil_std_frame,
-            ),
-            n_frames_crossfade,
+        raise NotImplementedError(
+            "Draw silences from any region is not implemented yet"
         )
-        sil_tuples_sec = [
-            (x / sample_rate, dur / sample_rate) for x, dur in sil_tuples_frames
-        ]
 
     if len(sil_tuples_frames) == 0:
         return audio_data, old_speech_activity
