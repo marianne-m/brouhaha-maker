@@ -21,7 +21,7 @@ SNR_NO_NOISE = 30
 CROSSFADE_MAX = 0.05
 SAMPLE_RATE = 16000
 AUDIOSET_SIZE = 8
-SAMPLE_MAX = 200
+SAMPLE_MAX = 500
 WINDOW_STEP = 0.01
 WINDOW_SIZE = 2
 
@@ -123,7 +123,8 @@ class AddNoise(Transform):
         previous_fade_end = torch.zeros(crossfade_frame)
 
         index_noise_file = 0
-        while len(noise_data) < 2*audio_nb_frames:
+        noise = torch.Tensor([])
+        while len(noise) < 2*audio_nb_frames:
             noise_file = self.load_noise(noise_files[index_noise_file], sample_rate)
 
             fade_begin = make_ramp(noise_file[:crossfade_frame], 0, 1)
@@ -133,6 +134,7 @@ class AddNoise(Transform):
             previous_fade_end = make_ramp(noise_file[-crossfade_frame:], 1, 0)
 
             index_noise_file += 1
+            noise = torch.cat(noise_data, dim=0)
 
         noise_data.append(noise_file[-crossfade_frame:])
 
@@ -176,8 +178,7 @@ class AddNoise(Transform):
 
         # if noise sequences are shorter than the audio file, add different
         # noise sequences one after the other
-        noise_files_nb = int(audio_nb_frames/(AUDIOSET_SIZE*sr) + 2)
-        noise = self.load_noise_on_the_fly(noise_files_nb, sr)
+        noise = self.load_noise_on_the_fly(audio_nb_frames, sr)
         frame_start = random.randint(0, noise.size(0) - audio_nb_frames)
         noise_seq_torch = noise[frame_start : frame_start + audio_nb_frames]
 
