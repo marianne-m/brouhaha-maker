@@ -53,10 +53,11 @@ def compute_detailed_snr(
     start_windows = np.arange(0, audio_data.size(0) - window_frames + 1, step_in_frames)
     end_windows = np.arange(window_frames - 1, audio_data.size(0), step_in_frames)  
 
+    epsilon = 10**(-3)
     # max(signal_to_noise, 10**(-10)) so the snr_db is equal to -100 when the signal is 0
     signal_to_noise = [
         max(
-            (power_audio[end] - power_audio[start]) / (power_noise[end] - power_noise[start]),
+            (power_audio[end] - power_audio[start]) / (power_noise[end] - power_noise[start] + epsilon),
             10**(-10)
         ) for start, end in zip(start_windows, end_windows)
     ]
