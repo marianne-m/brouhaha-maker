@@ -1,5 +1,6 @@
 import os
 import csv
+import glob
 import wget
 import shutil
 from tqdm import tqdm
@@ -29,18 +30,18 @@ def load_phone_labels_from_coraal(
 ) -> List[int]:
     with open(path_coraal_annot, "r") as f_:
         reader = csv.DictReader(f_, delimiter="\t")
-    last_start, last_end = None, None
-    speech_activities = []
-    for row in reader:
-        start, end = row["StTime"], row["EnTime"]
-        if last_start is None:
-            last_start, last_end = start, end
-            continue
-        elif start > last_end + threshold_silence:
-            speech_activities += [(last_start, last_end)]
-            last_start, last_end = start, end
-        else:
-            last_end = end
+        last_start, last_end = None, None
+        speech_activities = []
+        for row in reader:
+            start, end = float(row["StTime"]), float(row["EnTime"])
+            if last_start is None:
+                last_start, last_end = float(start), float(end)
+                continue
+            elif start > last_end + threshold_silence:
+                speech_activities += [(last_start, last_end)]
+                last_start, last_end = float(start), float(end)
+            else:
+                last_end = float(end)
 
     if last_start is not None:
         speech_activities += [(last_start, last_end)]
@@ -60,15 +61,15 @@ class CORAAL(Dataset):
         )
         print(f"Working with CORAAL")
 
-    def build_from_root_dir(self, path_root_coraal: Union[Path, str], **kwargs) -> None:
-        self.resample(path_root_coraal)
+    def build_from_root_dir(self, path_root_coraal: Union[Path, str], extension: str, **kwargs) -> None:
+        self.resample(path_root_coraal, original_extension=extension)
         self.create_phone_labels(path_root_coraal)
         self.create_rttm(path_root_coraal)
 
     # create a file with the phone labels of audio sequences
     def create_phone_labels(self, path_coraal_annot: Union[Path, str]) -> None:
         annot_files = [
-            x.with_suffix("*.txt") for x in Path(path_coraal_annot).glob("**/*.wav")
+            x for x in Path(path_coraal_annot).glob("**/*.txt")
         ]
         print(f"{len(annot_files)} files found")
         phone_labels = {
@@ -81,13 +82,13 @@ class CORAAL(Dataset):
     # create rttm files for all audio files
     def create_rttm(self, path_coraal_annot: Union[Path, str]):
         annot_files = [
-            x.with_suffix("*.txt") for x in Path(path_coraal_annot).glob("**/*.wav")
+            x for x in Path(path_coraal_annot).glob("**/*.txt")
         ]
         self.path_rttm.mkdir(exist_ok=True)
         for path_annot in annot_files:
             phone_seq = load_phone_labels_from_coraal(path_coraal_annot / path_annot)
             build_rttm_file_from_phone_labels(
-                phone_seq, (self.path_rttm / path_annot.name).with_suffix(".rttm")
+                phone_seq, (self.path_rttm / path_annot.name.replace(".txt", "_vad.rttm"))
             )
         print(f"RTTM files saved at {self.path_rttm}")
 
@@ -185,5 +186,10 @@ class CORAAL(Dataset):
             extract_dir = coraal / (archive).replace(".tar.gz", "")
             shutil.unpack_archive(archive, extract_dir)
             os.remove(archive)
+        
+        wget.download(METADATA)
+        hidden_files = glob.glob(f"{coraal}/**/.*")
+        for file in hidden_files:
+            os.remove(file)
 
         print("\nDone.")
