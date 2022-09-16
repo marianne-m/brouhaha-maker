@@ -165,11 +165,13 @@ class CORAAL(Dataset):
             f"Transcription files saved at {os.path.join(os.path.dirname(self.path_rttm), 'transcription_silence_smooth')}"
         )
     
-    def downlaod_DCA(self, downloaded_path):
+    def download_datasets(self, downloaded_path):
+        print(f"Downloading CORAAL DCA dataset into {downloaded_path}...")
         coraal = Path(downloaded_path)
+        coraal.mkdir(parents=True, exist_ok=True)
 
         parts = [str(num).zfill(2) for num in range(1, 11)]
-        for part in parts:
+        for part in tqdm(parts, total=len(parts)):
             url = f"http://lingtools.uoregon.edu/coraal/dca/2018.10.06/DCA_audio_part{part}_2018.10.06.tar.gz"
             wget.download(url)
             archive = Path(url).name
@@ -183,3 +185,5 @@ class CORAAL(Dataset):
             extract_dir = coraal / (archive).replace(".tar.gz", "")
             shutil.unpack_archive(archive, extract_dir)
             os.remove(archive)
+
+        print("\nDone.")
