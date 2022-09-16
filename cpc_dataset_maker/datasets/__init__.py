@@ -2,7 +2,7 @@ from cpc_dataset_maker.datasets.dataset import Dataset
 from cpc_dataset_maker.datasets.librispeech import LibriSpeechCPC
 from cpc_dataset_maker.datasets.coraal import CORAAL
 
-AVAILABLE_DATASETS = ["librispeech_cpc", "standard"]
+AVAILABLE_DATASETS = ["librispeech_cpc", "standard", "coraal"]
 
 
 def get_dataset_builder(dataset_name: str) -> Dataset:
