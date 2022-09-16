@@ -1,5 +1,7 @@
 import os
 import csv
+import wget
+import shutil
 from tqdm import tqdm
 from pathlib import Path
 import pandas as pd
@@ -12,6 +14,14 @@ from cpc_dataset_maker.vad_pyannote.rttm_data import (
     build_rttm_file_from_phone_labels,
     speech_activities_to_int_sequence,
 )
+
+
+TRANSCRIPTS = [
+    "http://lingtools.uoregon.edu/coraal/dca/2018.10.06/DCA_elanfiles_2018.10.06.tar.gz",
+    "http://lingtools.uoregon.edu/coraal/dca/2018.10.06/DCA_textfiles_2018.10.06.tar.gz",
+    "http://lingtools.uoregon.edu/coraal/dca/2018.10.06/DCA_textgrids_2018.10.06.tar.gz"
+]
+METADATA = "http://lingtools.uoregon.edu/coraal/dca/2018.10.06/DCA_metadata_2018.10.06.txt"
 
 # create a file with the phone labels of an audio sequence
 def load_phone_labels_from_coraal(
@@ -156,4 +166,20 @@ class CORAAL(Dataset):
         )
     
     def downlaod_DCA(self, downloaded_path):
-        pass
+        coraal = Path(downloaded_path)
+
+        parts = [str(num).zfill(2) for num in range(1, 11)]
+        for part in parts:
+            url = f"http://lingtools.uoregon.edu/coraal/dca/2018.10.06/DCA_audio_part{part}_2018.10.06.tar.gz"
+            wget.download(url)
+            archive = Path(url).name
+            extract_dir = str(coraal / archive).replace(".tar.gz", "")
+            shutil.unpack_archive(archive, extract_dir)
+            os.remove(archive)
+
+        for file in TRANSCRIPTS:
+            wget.download(file)
+            archive = Path(file).name
+            extract_dir = coraal / (archive).replace(".tar.gz", "")
+            shutil.unpack_archive(archive, extract_dir)
+            os.remove(archive)
