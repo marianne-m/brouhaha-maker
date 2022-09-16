@@ -16,6 +16,14 @@ from cpc_dataset_maker.transforms import (
 from cpc_dataset_maker.transforms.labels import SPEECH_ACTIVITY_LABEL
 
 
+def download(args):
+
+    base_db = get_dataset_builder(args.dataset_name)(args.root_db)
+
+    print("Downloading the dataset")
+    base_db.download_datasets(args.path_download)
+
+
 def init(args):
 
     base_db = get_dataset_builder(args.dataset_name)(args.root_db)
@@ -80,6 +88,17 @@ def parse_args():
 
     parser = argparse.ArgumentParser("Build the datasets for the SNR / VAD prediction")
     subparsers = parser.add_subparsers(dest="command")
+    parser_download = subparsers.add_parser("download")
+    update_base_parser(parser_download)
+    parser_download.add_argument(
+        "--root-in",
+        type=str,
+        help="Path of the dataset as downloaded from source. "
+        "Give this argument to build the SNR / VAD modified dataset",
+        default=None,
+    )
+    parser_download.add_argument("--path-download", type=str)
+
     parser_init = subparsers.add_parser("init")
     update_base_parser(parser_init)
     parser_init.add_argument(
@@ -203,6 +222,8 @@ if __name__ == "__main__":
     torch.multiprocessing.set_start_method("spawn", force=True)
     args = parse_args()
 
+    if args.command == "download":
+        download(args)
     if args.command == "init":
         init(args)
     if args.command == "transform":
