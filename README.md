@@ -14,6 +14,11 @@ conda env create -f env_pyannote.yml
 conda activate pyannote_datamaker
 ```
 
+To setup the project : 
+```
+pip install .
+```
+
 # Building the datasets for the VAD / SNR predictors
 
 Here are the instruction to build the extended datasets for both training and testing the VAD / SNR prediction model.
